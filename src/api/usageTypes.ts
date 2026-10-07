@@ -88,6 +88,13 @@ export type AssistantStreamEvent =
       declarationKey: string;
       toolName?: string;
       providerBlockId?: string;
+      /**
+       * Set when the provider names the call in its declaration, so the item adopts
+       * an identity a lifecycle callback already reserved. `tool_call_identity`
+       * still follows with the same ID and correlation.
+       */
+      toolCallId?: string;
+      correlation?: "provider_id" | "plugin_id" | "none";
     }
   | {
       type: "tool_call_delta";

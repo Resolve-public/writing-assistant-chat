@@ -293,3 +293,48 @@ describe("RFC-0011 incident, related protocol shapes", () => {
     expect(tools).toHaveLength(0);
   });
 });
+
+describe("a lifecycle callback that beats the declaring frame", () => {
+  // Recorded 2026-10-07: the in-process MCP handler reported a tool as running
+  // before the SDK frame declaring it was drained, and the frame then minted a
+  // second item for the same tool-use ID, refusing the batch as an intra-batch
+  // conflict and disposing the session.
+  it("declares the tool on the item the lifecycle callback reserved", () => {
+    const translator = new ClaudeCodeSdkMessageTranslator({
+      createSegmentId: (index) => `segment-${index}`,
+      toolCorrelation: "provider_id",
+    });
+    const builder = new AssistantTurnBuilder({
+      turnId: "turn-race",
+      createId: counterIds(),
+    });
+    const commit = (rawFrame: unknown) => {
+      const frame = translator.translateFrame(rawFrame);
+      if (frame) builder.applyCaptureBatch(sealCaptureFrame("turn-race#1", frame), 0);
+    };
+    const streamEvent = (uuid: string, event: unknown) => ({
+      type: "stream_event",
+      uuid,
+      session_id: "sess_race",
+      parent_tool_use_id: null,
+      event,
+    });
+
+    commit(streamEvent("u1", { type: "message_start", message: { id: "msg_race" } }));
+    const reservedId = builder.updateToolLifecycle("toolu_race", {
+      state: "running",
+      toolName: "read",
+    });
+    commit(
+      streamEvent("u2", {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "tool_use", id: "toolu_race", name: "read", input: {} },
+      }),
+    );
+
+    expect(toolItems(builder.snapshot())).toEqual([
+      expect.objectContaining({ id: reservedId, toolCallId: "toolu_race", state: "running" }),
+    ]);
+  });
+});

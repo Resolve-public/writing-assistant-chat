@@ -473,6 +473,15 @@ export class AssistantTurnBuilder {
           ...(fact.providerBlockId === undefined
             ? {}
             : { providerBlockId: fact.providerBlockId }),
+          ...(fact.toolCallId === undefined
+            ? {}
+            : {
+                toolCallId: fact.toolCallId,
+                correlation:
+                  fact.correlation === undefined || fact.correlation === "none"
+                    ? "provider_id"
+                    : fact.correlation,
+              }),
           ...(round === undefined ? {} : { round }),
         });
         if (fact.toolName !== undefined) changed.declaredTools.push(fact.toolName);

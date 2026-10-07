@@ -360,3 +360,45 @@ describe("atomic invalidation after a conflict", () => {
     expect(lowered.tier).toBe("textual");
   });
 });
+
+describe("a lifecycle callback that beats the declaration batch", () => {
+  // Claude Code runs the in-process MCP handler as soon as the CLI dispatches a
+  // tool, which can be before the SDK frame declaring that tool is drained. The
+  // translators emit `tool_call_start` and then `tool_call_identity`, so the
+  // reservation must survive that exact fact order.
+  it("adopts the reserved item when the declaration names its tool-call ID", () => {
+    const turn = builder();
+    turn.applyCaptureBatch(batch("f1", open()));
+    const reservedId = turn.updateToolLifecycle("toolu_race", {
+      state: "running",
+      toolName: "search_content",
+    });
+
+    const commit = turn.applyCaptureBatch(
+      batch("f2", [
+        { type: "prose_delta", segmentId: "s1", delta: "Reading the table." },
+        {
+          type: "tool_call_start",
+          segmentId: "s1",
+          declarationKey: "d1",
+          toolCallId: "toolu_race",
+          toolName: "search_content",
+        },
+        {
+          type: "tool_call_identity",
+          declarationKey: "d1",
+          toolCallId: "toolu_race",
+          correlation: "provider_id",
+        },
+      ]),
+    );
+
+    expect(toolItems(commit.snapshot)).toEqual([
+      expect.objectContaining({
+        id: reservedId,
+        toolCallId: "toolu_race",
+        state: "running",
+      }),
+    ]);
+  });
+});

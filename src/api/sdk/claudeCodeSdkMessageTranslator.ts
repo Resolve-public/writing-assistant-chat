@@ -144,6 +144,8 @@ export class ClaudeCodeSdkMessageTranslator {
           declarationKey,
           providerBlockId,
           toolName: normalizedToolName(block),
+          toolCallId,
+          correlation: this.options.toolCorrelation,
         },
         {
           type: "tool_call_identity",
@@ -249,6 +251,8 @@ export class ClaudeCodeSdkMessageTranslator {
           declarationKey,
           providerBlockId,
           toolName: normalizedToolName(block),
+          toolCallId,
+          correlation: this.options.toolCorrelation,
         },
         {
           type: "tool_call_identity",
