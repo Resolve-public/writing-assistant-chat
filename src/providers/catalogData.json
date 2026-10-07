@@ -1,15 +1,8 @@
 {
-  "asOf": "2026-09-06",
+  "asOf": "2026-10-07",
   "source": "https://openrouter.ai/api/v1/models",
   "providers": {
     "anthropic": [
-      {
-        "modelId": "claude-3-haiku",
-        "name": "Claude 3 Haiku",
-        "role": "completion",
-        "contextWindowSize": 200000,
-        "vision": true
-      },
       {
         "modelId": "claude-fable-5",
         "name": "Claude Fable 5",
@@ -32,10 +25,10 @@
         "vision": true
       },
       {
-        "modelId": "claude-opus-4",
-        "name": "Claude Opus 4",
+        "modelId": "claude-haiku-5-5",
+        "name": "Claude Haiku 5.5",
         "role": "completion",
-        "contextWindowSize": 200000,
+        "contextWindowSize": 1000000,
         "vision": true
       },
       {
@@ -81,10 +74,17 @@
         "vision": true
       },
       {
+        "modelId": "claude-opus-5-5",
+        "name": "Claude Opus 5.5",
+        "role": "completion",
+        "contextWindowSize": 1000000,
+        "vision": true
+      },
+      {
         "modelId": "claude-sonnet-4",
         "name": "Claude Sonnet 4",
         "role": "completion",
-        "contextWindowSize": 1000000,
+        "contextWindowSize": 200000,
         "vision": true
       },
       {
@@ -104,6 +104,13 @@
       {
         "modelId": "claude-sonnet-5",
         "name": "Claude Sonnet 5",
+        "role": "completion",
+        "contextWindowSize": 1000000,
+        "vision": true
+      },
+      {
+        "modelId": "claude-sonnet-5-5",
+        "name": "Claude Sonnet 5.5",
         "role": "completion",
         "contextWindowSize": 1000000,
         "vision": true
@@ -356,6 +363,48 @@
       {
         "modelId": "gpt-6-astra-pro",
         "name": "GPT-6 Astra Pro",
+        "role": "completion",
+        "contextWindowSize": 1050000,
+        "vision": true
+      },
+      {
+        "modelId": "gpt-6-luna",
+        "name": "GPT-6 Luna",
+        "role": "completion",
+        "contextWindowSize": 1050000,
+        "vision": true
+      },
+      {
+        "modelId": "gpt-6-luna-pro",
+        "name": "GPT-6 Luna Pro",
+        "role": "completion",
+        "contextWindowSize": 1050000,
+        "vision": true
+      },
+      {
+        "modelId": "gpt-6-sol",
+        "name": "GPT-6 Sol",
+        "role": "completion",
+        "contextWindowSize": 1050000,
+        "vision": true
+      },
+      {
+        "modelId": "gpt-6-sol-pro",
+        "name": "GPT-6 Sol Pro",
+        "role": "completion",
+        "contextWindowSize": 1050000,
+        "vision": true
+      },
+      {
+        "modelId": "gpt-6.1-sol",
+        "name": "GPT-6.1 Sol",
+        "role": "completion",
+        "contextWindowSize": 1050000,
+        "vision": true
+      },
+      {
+        "modelId": "gpt-6.1-sol-pro",
+        "name": "GPT-6.1 Sol Pro",
         "role": "completion",
         "contextWindowSize": 1050000,
         "vision": true

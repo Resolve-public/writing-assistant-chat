@@ -1,7 +1,7 @@
 {
 	"id": "writing-assistant-chat",
 	"name": "Writing Assistant Chat",
-	"version": "1.5.6",
+	"version": "1.5.7",
 	"minAppVersion": "1.13.0",
 	"description": "AI writing assistant with unified chat, planning, and ambient editing. Connects to local or cloud providers. Features vault-wide RAG retrieval, knowledge graph, agentic tool use, note context, and reusable prompt commands.",
 	"author": "Resolve-public",
