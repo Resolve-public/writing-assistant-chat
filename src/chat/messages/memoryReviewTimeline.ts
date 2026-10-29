@@ -2,6 +2,7 @@ import type { MemoryMutation } from "../../tools/memory/handlers";
 import type { ToolCall } from "../../tools/types";
 import type { Memory } from "../../shared/types";
 import { TOOL_LABELS, pendingToolLabel } from "../../tools/metadata";
+import { resolveVaultReviewMounts } from "./vaultReviewTimeline";
 
 export type MemoryReviewStatus = "pending" | "applied" | "declined" | "failed";
 
@@ -47,12 +48,13 @@ export class MemoryReviewTimelineView {
     const timeline = this.opts.timelineEl;
     timeline.querySelectorAll(".lmsa-memory-step-controls").forEach((element) => {
       element
-        .closest(".lmsa-agentic-timeline-step")
+        .closest(".lmsa-agentic-timeline-step, .lmsa-assistant-turn-item")
         ?.classList.remove(...STATE_CLASSES);
       element.remove();
     });
+    // A forget's reason stands alone on the step rather than inside a preview.
     timeline
-      .querySelectorAll(".lmsa-memory-review-preview")
+      .querySelectorAll(".lmsa-memory-review-preview, .lmsa-memory-review-why")
       .forEach((element) => element.remove());
   }
 
@@ -87,22 +89,27 @@ export class MemoryReviewTimelineView {
     step: HTMLElement,
     proposal: ReviewableMemoryProposal,
   ): void {
-    step.classList.remove(...STATE_CLASSES);
-    step.classList.add(statusClass(proposal.status));
-    const body =
-      step.querySelector<HTMLElement>(".lmsa-agentic-timeline-step-body") ??
-      step;
-    body
+    // The same mounts the vault review uses: on the canonical turn the located
+    // host is the inline action slot, which holds the state label only, while the
+    // preview needs the whole step body to wrap onto its own row.
+    const { stateEl, labelHostEl, controlsHostEl, presentationHostEl } =
+      resolveVaultReviewMounts(step);
+    stateEl.classList.remove(...STATE_CLASSES);
+    stateEl.classList.add(statusClass(proposal.status));
+    presentationHostEl
       .querySelector(":scope > .lmsa-agentic-timeline-step-failed")
       ?.remove();
-    this.relabel(body, proposal);
+    this.relabel(labelHostEl, proposal);
 
-    const controls = body.createDiv({
+    const controls = controlsHostEl.createDiv({
       cls: "lmsa-memory-step-controls",
     });
     controls.addEventListener("click", (event) => event.stopPropagation());
     this.renderControls(controls, proposal);
-    this.renderPreview(body, proposal);
+    const previewEl = this.renderPreview(presentationHostEl, proposal);
+    if (previewEl && presentationHostEl !== controlsHostEl) {
+      controlsHostEl.after(previewEl);
+    }
   }
 
   private relabel(
@@ -169,12 +176,11 @@ export class MemoryReviewTimelineView {
   private renderPreview(
     body: HTMLElement,
     proposal: ReviewableMemoryProposal,
-  ): void {
+  ): HTMLElement | null {
     const explanation = proposal.mutation.explanation;
     if (proposal.mutation.kind !== "add") {
       // A forget carries no record to preview, so its reason is the whole preview.
-      if (explanation) this.renderExplanation(body, explanation);
-      return;
+      return explanation ? this.renderExplanation(body, explanation) : null;
     }
     const memory = proposal.mutation.memory;
     const preview = body.createDiv({
@@ -199,6 +205,7 @@ export class MemoryReviewTimelineView {
         text: memory.content,
       });
     }
+    return preview;
   }
 
   /**
@@ -206,12 +213,13 @@ export class MemoryReviewTimelineView {
    * the description and body are the evidence, this is the claim about it. Mirrors how
    * an edit tool's `explanation` reaches the reviewer on its own step.
    */
-  private renderExplanation(parent: HTMLElement, explanation: string): void {
+  private renderExplanation(parent: HTMLElement, explanation: string): HTMLElement {
     const el = parent.createDiv({
       cls: "lmsa-memory-review-why",
       text: explanation,
     });
     el.addEventListener("click", (event) => event.stopPropagation());
+    return el;
   }
 }
 

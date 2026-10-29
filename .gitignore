@@ -48,3 +48,6 @@ data.json
 rag-index.json
 rag-knowledge-graph.json
 conversations/
+
+# Codex local agent config (per-machine, not part of the plugin)
+.codex/
