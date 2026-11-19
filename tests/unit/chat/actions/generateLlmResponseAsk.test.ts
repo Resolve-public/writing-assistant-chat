@@ -578,8 +578,9 @@ function harness(
     turnView,
   };
   const transcript = {
-    createBubble: vi.fn(() => bubble),
+    createDraftBubble: vi.fn(() => bubble),
     registerBubble: vi.fn(),
+    releaseDraft: vi.fn(),
     renderBubbleContent: vi.fn(() => Promise.resolve()),
     renderPlainTextContent: vi.fn(),
   } as unknown as ChatTranscript;

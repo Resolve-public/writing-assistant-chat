@@ -47,6 +47,13 @@ const SCROLL_TO_BOTTOM_VISIBILITY_PX = 120;
 
 export class ChatTranscript {
   private bubblesByMessageId = new Map<string, BubbleRefs>();
+  /**
+   * The bubble a generation is streaming into before its message exists, and the
+   * message it replaces on a regeneration. Renders keep it last and keep the
+   * replaced message hidden, until it is committed or released.
+   */
+  private draft: { bubble: AssistantBubbleRefs; supersededMessageId: string | null } | null =
+    null;
   private renderedMessageIds: string[] = [];
   private shouldAutoScroll = true;
   private readonly markdownRenderer: MarkdownBubbleRenderer;
@@ -100,10 +107,14 @@ export class ChatTranscript {
     );
   }
 
+  /**
+   * @param isConversationSwitch Forces the scroll to the bottom, and drops any
+   *   in-flight draft, which belongs to the conversation being left.
+   */
   async renderMessages(
     messages: ConversationMessage[],
     actionCallbacks?: BubbleActionCallbacks,
-    forceScroll = true
+    isConversationSwitch = true
   ): Promise<void> {
     const newIds = messages.map((m) => m.id);
     const canIncrement = this.canIncrementalUpdate(newIds);
@@ -115,7 +126,13 @@ export class ChatTranscript {
     }
 
     this.renderedMessageIds = newIds;
-    this.scrollToBottom(forceScroll);
+    if (isConversationSwitch) {
+      this.draft?.bubble.rowEl.remove();
+      this.draft = null;
+    } else {
+      this.restoreDraftPlacement();
+    }
+    this.scrollToBottom(isConversationSwitch);
   }
 
   /**
@@ -143,8 +160,13 @@ export class ChatTranscript {
 
     for (let i = startIndex; i < messages.length; i++) {
       const message = messages[i];
-      const bubble = this.createBubble(message.role, message.id);
-      await this.renderMessageBody(bubble, message);
+      // A bubble the send flow already built (its user message, mid-generation)
+      // is adopted as it stands instead of being duplicated below the draft.
+      let bubble = this.bubblesByMessageId.get(message.id);
+      if (!bubble) {
+        bubble = this.createBubble(message.role, message.id);
+        await this.renderMessageBody(bubble, message);
+      }
 
       if (actionCallbacks) {
         const isLastAssistant = i === lastAssistantIndex;
@@ -205,6 +227,7 @@ export class ChatTranscript {
    * attribute and adds to the lookup map for later adoption.
    */
   registerBubble(messageId: string, bubble: BubbleRefs): void {
+    if (this.draft?.bubble === bubble) this.draft = null;
     const existing = this.bubblesByMessageId.get(messageId);
     if (existing && existing.rowEl !== bubble.rowEl) {
       if (existing.role === "assistant") existing.turnView.destroy();
@@ -215,6 +238,39 @@ export class ChatTranscript {
     }
     bubble.rowEl.dataset.messageId = messageId;
     this.bubblesByMessageId.set(messageId, bubble);
+  }
+
+  /**
+   * Create the bubble a generation streams into. On a regeneration the replaced
+   * message stays in the store until the draft commits, so its bubble is hidden
+   * meanwhile; committing through `registerBubble()` removes it, and
+   * `releaseDraft()` reveals it again on every other exit.
+   */
+  createDraftBubble(supersededMessageId: string | null = null): AssistantBubbleRefs {
+    if (this.draft) this.releaseDraft(this.draft.bubble);
+    const bubble = this.createBubble("assistant");
+    this.draft = { bubble, supersededMessageId };
+    this.setSuperseded(supersededMessageId, true);
+    return bubble;
+  }
+
+  /** End a draft that was not committed. A no-op once `registerBubble()` took it. */
+  releaseDraft(bubble: AssistantBubbleRefs): void {
+    if (this.draft?.bubble !== bubble) return;
+    this.setSuperseded(this.draft.supersededMessageId, false);
+    this.draft = null;
+  }
+
+  /** A render rebuilt or appended rows, so the draft goes back to last place. */
+  private restoreDraftPlacement(): void {
+    if (!this.draft) return;
+    this.refs.messagesEl.appendChild(this.draft.bubble.rowEl);
+    this.setSuperseded(this.draft.supersededMessageId, true);
+  }
+
+  private setSuperseded(messageId: string | null, superseded: boolean): void {
+    if (messageId === null) return;
+    this.bubblesByMessageId.get(messageId)?.rowEl.toggleClass("is-superseded", superseded);
   }
 
   /**

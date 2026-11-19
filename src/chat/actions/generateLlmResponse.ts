@@ -330,7 +330,11 @@ export async function generateLlmResponse(options: LlmGenerationOptions): Promis
     }
   }
 
-  const assistantBubble = transcript.createBubble("assistant");
+  // A regeneration streams while the original message stays active, so the
+  // transcript hides the original until the draft commits or is released.
+  const assistantBubble = transcript.createDraftBubble(
+    finalization.kind === "replace" ? finalization.oldMessage.id : null,
+  );
 
   // The plugin loop and Claude Code's internal MCP loop now feed the same
   // canonical builder. Claude lifecycle callbacks update state by exact ID but
@@ -580,7 +584,6 @@ export async function generateLlmResponse(options: LlmGenerationOptions): Promis
   };
 
   try {
-
     // One unified agentic round budget now that the modes are gone (the old edit-only
     // cap keyed off the live document, which no longer exists). The per-turn
     // identical-call guard is the primary spin control; this is the high backstop.
@@ -810,6 +813,7 @@ export async function generateLlmResponse(options: LlmGenerationOptions): Promis
       });
     }
   } finally {
+    transcript.releaseDraft(assistantBubble);
     // Resolve any op still parked on the user so no await leaks past the turn.
     liveReview.cancelPending();
     // The generation owns exactly one coordinator per lane. Destroying them settles any

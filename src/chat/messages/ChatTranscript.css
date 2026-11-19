@@ -49,6 +49,11 @@ button.lmsa-scroll-to-bottom {
   gap: 0 0.75rem;
 }
 
+/* The original stays in the store until a regeneration commits, but only one answer shows. */
+.lmsa-chat-window-message.is-superseded {
+  @apply lmsa:hidden;
+}
+
 .lmsa-chat-window-message--user {
   @apply lmsa:justify-end;
 }

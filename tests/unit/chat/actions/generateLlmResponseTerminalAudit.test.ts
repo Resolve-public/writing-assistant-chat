@@ -338,8 +338,9 @@ function harness() {
     turnView,
   };
   const transcript = {
-    createBubble: vi.fn(() => bubble),
+    createDraftBubble: vi.fn(() => bubble),
     registerBubble: vi.fn(),
+    releaseDraft: vi.fn(),
   } as unknown as ChatTranscript;
   const interactionHost = {
     mount: vi.fn(() => true),
