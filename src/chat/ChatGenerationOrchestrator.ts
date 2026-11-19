@@ -33,6 +33,13 @@ export type GenerationOrchestratorDeps = {
 export class ChatGenerationOrchestrator {
   private isGenerating = false;
   private activeAbortController: AbortController | null = null;
+  /** Every entry point still running, through its post-generation sync. */
+  private readonly runs = new Set<Promise<void>>();
+  /**
+   * A stop that arrived before the run armed its controller (availability check,
+   * runtime resolution). It is applied the moment the controller is armed.
+   */
+  private pendingStopCause: "user" | "unload" | null = null;
 
   constructor(private readonly deps: GenerationOrchestratorDeps) {}
 
@@ -56,7 +63,25 @@ export class ChatGenerationOrchestrator {
    *   rather than `user_stop`: only a user Stop may preserve a Claude session for
    *   reuse, and a session being torn down is not one to preserve (ADR-0032).
    */
-  stopGeneration(cause: "user" | "unload" = "user"): void {
+  stopGeneration(cause: "user" | "unload" = "user"): Promise<void> {
+    if (this.runs.size > 0) this.pendingStopCause = cause;
+    this.abortActive(cause);
+    return this.whenSettled();
+  }
+
+  /**
+   * Resolves once every run has settled, its terminal write included. Never
+   * rejects; the run's own caller is the one told about its failure.
+   *
+   * The store writes to whichever conversation is active, so anything about to
+   * load another conversation awaits this first, or a run still winding down
+   * lands its turn in the conversation that replaced its own.
+   */
+  private whenSettled(): Promise<void> {
+    return Promise.all([...this.runs]).then(() => undefined);
+  }
+
+  private abortActive(cause: "user" | "unload"): void {
     if (!this.activeAbortController) return;
     this.activeAbortController.abort(
       cause === "unload" ? PLUGIN_UNLOAD_ABORT_REASON : undefined,
@@ -64,9 +89,41 @@ export class ChatGenerationOrchestrator {
     this.activeAbortController = null;
   }
 
-  async send(
-    promptOverride?: string,
-    autoInsertAfterResponse = false,
+  private armAbortController(controller: AbortController | null): void {
+    this.activeAbortController = controller;
+    if (controller && this.pendingStopCause) this.abortActive(this.pendingStopCause);
+  }
+
+  private async track(run: () => Promise<void>): Promise<void> {
+    const running = run();
+    const settled = running.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.runs.add(settled);
+    try {
+      await running;
+    } finally {
+      this.runs.delete(settled);
+      if (this.runs.size === 0) this.pendingStopCause = null;
+    }
+  }
+
+  send(promptOverride?: string, autoInsertAfterResponse = false): Promise<void> {
+    return this.track(() => this.runSend(promptOverride, autoInsertAfterResponse));
+  }
+
+  regenerate(messageId: string): Promise<void> {
+    return this.track(() => this.runRegenerate(messageId));
+  }
+
+  generateResponse(): Promise<void> {
+    return this.track(() => this.runGenerateResponse());
+  }
+
+  private async runSend(
+    promptOverride: string | undefined,
+    autoInsertAfterResponse: boolean,
   ): Promise<void> {
     const store = this.deps.getStore();
     const transcript = this.deps.getTranscript();
@@ -87,9 +144,7 @@ export class ChatGenerationOrchestrator {
       interactionHost,
       getIsGenerating: () => this.isGenerating,
       setIsGenerating: (sending) => this.setIsGeneratingAndSync(sending),
-      setActiveAbortController: (controller) => {
-        this.activeAbortController = controller;
-      },
+      setActiveAbortController: (controller) => this.armAbortController(controller),
       syncConversationUi: () => this.deps.syncConversationUi(),
       onCalibrate: (est, actual) => this.deps.getContextUpdater()?.calibrate(est, actual),
       onEnterAutoApply: () => this.enterAutoApply(),
@@ -100,7 +155,7 @@ export class ChatGenerationOrchestrator {
     await this.deps.postGenerationSync();
   }
 
-  async regenerate(messageId: string): Promise<void> {
+  private async runRegenerate(messageId: string): Promise<void> {
     const store = this.deps.getStore();
     const transcript = this.deps.getTranscript();
     const composer = this.deps.getComposer();
@@ -119,9 +174,7 @@ export class ChatGenerationOrchestrator {
       messageId,
       getIsGenerating: () => this.isGenerating,
       setIsGenerating: (generating) => this.setIsGeneratingAndSync(generating),
-      setActiveAbortController: (controller) => {
-        this.activeAbortController = controller;
-      },
+      setActiveAbortController: (controller) => this.armAbortController(controller),
       syncConversationUi: () => this.deps.syncConversationUi(),
       onCalibrate: (est, actual) => this.deps.getContextUpdater()?.calibrate(est, actual),
       onEnterAutoApply: () => this.enterAutoApply(),
@@ -129,7 +182,7 @@ export class ChatGenerationOrchestrator {
     await this.deps.postGenerationSync();
   }
 
-  async generateResponse(): Promise<void> {
+  private async runGenerateResponse(): Promise<void> {
     const store = this.deps.getStore();
     const transcript = this.deps.getTranscript();
     const composer = this.deps.getComposer();
@@ -207,9 +260,7 @@ export class ChatGenerationOrchestrator {
       ...(runtime?.generation ? { claudeGeneration: runtime.generation } : {}),
       finalization: { kind: "append" },
       setIsGenerating: (v) => this.setIsGeneratingAndSync(v),
-      setActiveAbortController: (c) => {
-        this.activeAbortController = c;
-      },
+      setActiveAbortController: (controller) => this.armAbortController(controller),
       onCalibrate: (est, actual) => this.deps.getContextUpdater()?.calibrate(est, actual),
       onEnterAutoApply: () => this.enterAutoApply(),
     });

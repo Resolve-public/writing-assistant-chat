@@ -252,7 +252,8 @@ export class ChatBubbleActionHandler {
     const store = this.deps.getStore();
     if (!store) return;
 
-    this.deps.getOrchestrator().stopGeneration();
+    // Branching switches to the new conversation, so the run must settle first.
+    await this.deps.getOrchestrator().stopGeneration();
     await branchConversation({
       store,
       messageId,

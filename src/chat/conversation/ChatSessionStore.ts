@@ -488,7 +488,13 @@ export class ChatSessionStore {
     await this.plugin.saveSettings();
   }
 
-  async persistActiveConversation(): Promise<void> {
+  /**
+   * @param options.leaving The view is about to move off this conversation (new,
+   *   switch, close). Only then is an empty, untitled conversation discarded: a
+   *   save while it is still shown (the draft timer after the composer is cleared)
+   *   must keep its meta, or the open view loses its model and cannot set one.
+   */
+  async persistActiveConversation(options: { leaving?: boolean } = {}): Promise<void> {
     const id = this.memory.getActiveConversationId();
     if (!id) return;
 
@@ -501,7 +507,7 @@ export class ChatSessionStore {
     const isEmptyConversation = cleanMessages.length === 0 && !snapshot.draft.trim();
     const meta = history.conversations[metaIndex];
 
-    if (isEmptyConversation && !meta.title) {
+    if (options.leaving && isEmptyConversation && !meta.title) {
       history.conversations.splice(metaIndex, 1);
       await this.storage.delete(id);
       this.search.invalidate(id);

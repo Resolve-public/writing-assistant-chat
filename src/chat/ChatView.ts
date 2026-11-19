@@ -142,7 +142,7 @@ export class ChatView extends ItemView {
         void this.orchestrator.send();
       },
       onStopRequest: () => {
-        this.orchestrator.stopGeneration();
+        void this.orchestrator.stopGeneration();
       },
       onPostureChange: (posture) => {
         // Persist per conversation so a reload or a switch restores this thread's
@@ -516,7 +516,7 @@ export class ChatView extends ItemView {
     this.resizeObserver = null;
     this.sessionStore?.clearDraftSaveTimer();
     this.prepareForPluginUnload();
-    await this.sessionStore?.persistActiveConversation();
+    await this.sessionStore?.persistActiveConversation({ leaving: true });
     this.contextUpdater?.destroy();
     this.transcript?.destroy();
     this.emptyStateCarousel?.destroy();
@@ -537,7 +537,7 @@ export class ChatView extends ItemView {
    * plugin services are torn down. This does not detach the leaf.
    */
   prepareForPluginUnload(): void {
-    this.orchestrator?.stopGeneration("unload");
+    void this.orchestrator?.stopGeneration("unload");
     this.interactionHost?.destroy();
   }
 

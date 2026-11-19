@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Component } from "obsidian";
 
 vi.mock("../../../../src/chat/finalization/prepareApiMessages", () => ({
   prepareApiMessages: vi.fn(() =>
@@ -45,6 +44,36 @@ vi.mock("../../../../src/chat/actions/liveVaultReview", () => ({
   },
 }));
 
+/**
+ * The send entry point, reduced to the part this file is about: it awaits a
+ * pre-generation step (availability, runtime resolution) and then runs the real
+ * generation with the orchestrator's own callbacks.
+ */
+const sendScript = {
+  client: null as ChatClient | null,
+  beforeGeneration: Promise.resolve(),
+};
+vi.mock("../../../../src/chat/actions/sendMessage", () => ({
+  sendMessage: async (options: SendMessageOptions) => {
+    options.setIsGenerating(true);
+    await sendScript.beforeGeneration;
+    await generateLlmResponse({
+      plugin: options.plugin,
+      owner: options.owner,
+      store: options.store,
+      transcript: options.transcript,
+      activeModel: { provider: "lmstudio", modelId: "test-model", name: "Test" } as CompletionModel,
+      client: sendScript.client as ChatClient,
+      interactionHost: options.interactionHost,
+      posture: "ask",
+      finalization: { kind: "append" },
+      setIsGenerating: options.setIsGenerating,
+      setActiveAbortController: options.setActiveAbortController,
+    });
+  },
+}));
+
+import type { Component } from "obsidian";
 import type { ChatClient } from "../../../../src/api/chatClient";
 import type {
   AssistantStreamAttemptContext,
@@ -53,31 +82,37 @@ import type {
 import type { AssistantStreamEvent } from "../../../../src/api/usageTypes";
 import { createAbortError } from "../../../../src/api/httpTransport";
 import { generateLlmResponse } from "../../../../src/chat/actions/generateLlmResponse";
+import type { sendMessage } from "../../../../src/chat/actions/sendMessage";
+import { ChatConversationController } from "../../../../src/chat/ChatConversationController";
+import { ChatGenerationOrchestrator } from "../../../../src/chat/ChatGenerationOrchestrator";
 import { ChatSessionStore } from "../../../../src/chat/conversation/ChatSessionStore";
 import type { ConversationStorage } from "../../../../src/chat/conversation/ConversationStorage";
 import { normalizeConversation } from "../../../../src/chat/conversation/conversationUtils";
-import type { ChatTranscript } from "../../../../src/chat/messages/ChatTranscript";
-import type { ComposerInteractionHostPort } from "../../../../src/chat/interactions/ComposerInteractionHost";
 import { DEFAULT_SETTINGS } from "../../../../src/constants";
 import type WritingAssistantChat from "../../../../src/main";
 import type { CompletionModel, Conversation } from "../../../../src/shared/types";
 import { ownedRunFromLegacy } from "../../../helpers/ownedRun";
 import { DEFAULT_VAULT_OP_POLICY } from "../../../../src/vault-ops/gateway";
 
+type SendMessageOptions = Parameters<typeof sendMessage>[0];
+
 /**
- * PROBE: does a generation stopped by a conversation switch write its turn into
- * the conversation it was started in, or into whichever one is active by the time
- * the provider has stopped?
+ * A generation stopped by leaving its conversation must land its turn in the
+ * conversation it was started in.
  *
- * The store, the generation pipeline, and the controller's switch sequence are
- * real. The provider streams one delta and then waits for abort; `stopMs` is how
- * long it takes to wind down after the abort, as a provider with a graceful stop
- * does. Storage writes take a few milliseconds, as a disk does.
+ * The store writes to whichever conversation is active, and a provider can take
+ * real time to wind down after the abort (a graceful stop). Before the
+ * orchestrator's stop settled the run, a switch that outlasted that wind-down
+ * loaded the next conversation first, and the stopped turn was written into it.
+ *
+ * The store, the orchestrator, the conversation controller, and the generation
+ * pipeline are real. Storage writes take a few milliseconds, as a disk does.
  */
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-function makeClient(stopMs: number, onFirstDelta: () => void): ChatClient {
+/** Streams one delta, then winds down for `stopMs` once aborted. */
+function windingDownClient(stopMs: number, onFirstDelta: () => void): ChatClient {
   return {
     complete: vi.fn(),
     stream: (
@@ -91,9 +126,11 @@ function makeClient(stopMs: number, onFirstDelta: () => void): ChatClient {
         yield { type: "segment_start", segmentId };
         yield { type: "prose_delta", segmentId, delta: "Partial answer." };
         onFirstDelta();
-        await new Promise<void>((resolve) =>
-          attempt.signal.addEventListener("abort", () => resolve(), { once: true }),
-        );
+        if (!attempt.signal.aborted) {
+          await new Promise<void>((resolve) =>
+            attempt.signal.addEventListener("abort", () => resolve(), { once: true }),
+          );
+        }
         await sleep(stopMs);
         throw createAbortError();
       })();
@@ -116,7 +153,7 @@ function makeClient(stopMs: number, onFirstDelta: () => void): ChatClient {
   } as unknown as ChatClient;
 }
 
-function conversationFile(id: string, userText: string): Conversation {
+function conversationFile(id: string): Conversation {
   return {
     id,
     title: id,
@@ -124,13 +161,13 @@ function conversationFile(id: string, userText: string): Conversation {
     updatedAt: 1,
     modelId: "test-model",
     modelName: "Test",
-    messages: [{ id: `user-${id}`, role: "user", content: userText }],
+    messages: [{ id: `user-${id}`, role: "user", content: `question in ${id}` }],
     draft: "",
     approvalPosture: "ask",
   } as Conversation;
 }
 
-async function switchDuringGeneration(stopMs: number) {
+async function harness() {
   const meta = (id: string) => ({
     id,
     title: id,
@@ -151,8 +188,8 @@ async function switchDuringGeneration(stopMs: number) {
     },
   };
   const files = new Map<string, string>([
-    ["conversation-A", JSON.stringify(conversationFile("conversation-A", "question in A"))],
-    ["conversation-B", JSON.stringify(conversationFile("conversation-B", "question in B"))],
+    ["conversation-A", JSON.stringify(conversationFile("conversation-A"))],
+    ["conversation-B", JSON.stringify(conversationFile("conversation-B"))],
   ]);
   const storage = {
     load: async (id: string) => {
@@ -207,83 +244,88 @@ async function switchDuringGeneration(stopMs: number) {
     createDraftBubble: vi.fn(() => bubble),
     registerBubble: vi.fn(),
     releaseDraft: vi.fn(),
-  } as unknown as ChatTranscript;
+    setEmptyStateVisible: vi.fn(),
+  };
   const interactionHost = {
     mount: vi.fn(() => true),
     isActive: vi.fn(() => false),
     clearIfOwner: vi.fn(),
     destroy: vi.fn(),
-  } as unknown as ComposerInteractionHostPort;
+  };
 
-  let abortController: AbortController | null = null;
-  let firstDelta!: () => void;
-  const streaming = new Promise<void>((resolve) => (firstDelta = resolve));
-
-  const generation = generateLlmResponse({
+  const orchestrator = new ChatGenerationOrchestrator({
     plugin,
     owner: {} as Component,
-    store,
-    transcript,
-    activeModel: { provider: "lmstudio", modelId: "test-model", name: "Test" } as CompletionModel,
-    client: makeClient(stopMs, firstDelta),
-    interactionHost,
-    posture: "ask",
-    finalization: { kind: "append" },
-    setIsGenerating: vi.fn(),
-    setActiveAbortController: (controller) => {
-      if (controller) abortController = controller;
-    },
+    getStore: () => store,
+    getTranscript: () => transcript as never,
+    getComposer: () => ({ getPosture: () => "ask", setSendingState: vi.fn() }) as never,
+    getInteractionHost: () => interactionHost as never,
+    getModelSelector: () => ({}) as never,
+    getContextUpdater: () => null,
+    getLayout: () => null,
+    syncConversationUi: () => Promise.resolve(),
+    postGenerationSync: () => Promise.resolve(),
   });
-  const settled = generation.then(
-    () => null,
-    (error: unknown) => error,
-  );
-
-  await streaming;
-  // ChatConversationController.switchConversation, in its own order.
-  abortController!.abort();
-  await store.persistActiveConversation();
-  await store.switchToConversation("conversation-B");
-  const generationError = await settled;
+  const controller = new ChatConversationController({
+    getStore: () => store,
+    getDrawer: () => null,
+    getOrchestrator: () => orchestrator,
+    syncConversationUi: () => Promise.resolve(),
+    refreshAvailability: () => Promise.resolve(),
+  });
 
   const onDisk = (id: string) => normalizeConversation(JSON.parse(files.get(id) ?? "null"));
-  return {
-    generationError,
-    a: onDisk("conversation-A"),
-    b: onDisk("conversation-B"),
-    live: store.getSnapshot(),
-  };
+  return { store, orchestrator, controller, onDisk };
 }
 
-const assistantCount = (conversation: Conversation) =>
-  conversation.messages.filter((message) => message.role === "assistant").length;
+const assistantMessages = (conversation: Conversation) =>
+  conversation.messages.filter((message) => message.role === "assistant");
 
-describe("PROBE: stopping a generation by switching conversations", () => {
-  for (const stopMs of [0, 50]) {
-    it(`provider winds down in ${stopMs}ms`, async () => {
-      const result = await switchDuringGeneration(stopMs);
-      console.error(
-        `[probe stopMs=${stopMs}]`,
-        JSON.stringify(
-          {
-            generationError: String(result.generationError),
-            A: {
-              messages: result.a.messages.map((m) => `${m.role}:${m.id}`),
-              inFlightAudit: result.a.inFlightGenerationAudit?.messageId ?? null,
-            },
-            B: {
-              messages: result.b.messages.map((m) => `${m.role}:${m.id}`),
-              inFlightAudit: result.b.inFlightGenerationAudit?.messageId ?? null,
-            },
-            liveActive: result.live.activeConversationId,
-            liveMessages: result.live.messageHistory.map((m) => `${m.role}:${m.id}`),
-          },
-          null,
-          2,
-        ),
-      );
-      expect(assistantCount(result.b)).toBe(0);
-      expect(assistantCount(result.a)).toBe(1);
-    });
-  }
+describe("leaving a conversation while it generates", () => {
+  it("keeps a slowly stopping turn in its own conversation", async () => {
+    const h = await harness();
+    let firstDelta!: () => void;
+    const streaming = new Promise<void>((resolve) => (firstDelta = resolve));
+    sendScript.client = windingDownClient(50, firstDelta);
+    sendScript.beforeGeneration = Promise.resolve();
+
+    const send = h.orchestrator.send();
+    await streaming;
+    await h.controller.switchConversation("conversation-B");
+    await send;
+
+    expect(assistantMessages(h.onDisk("conversation-B"))).toHaveLength(0);
+    expect(assistantMessages(h.onDisk("conversation-A"))).toHaveLength(1);
+    expect(h.store.getSnapshot().activeConversationId).toBe("conversation-B");
+    expect(assistantMessages({ messages: h.store.getSnapshot().messageHistory } as Conversation))
+      .toHaveLength(0);
+  });
+
+  it("applies a stop that arrives before the run armed its abort", async () => {
+    const h = await harness();
+    let release!: () => void;
+    sendScript.beforeGeneration = new Promise<void>((resolve) => (release = resolve));
+    const client = windingDownClient(0, () => undefined);
+    const stream = vi.spyOn(client, "stream");
+    sendScript.client = client;
+
+    const send = h.orchestrator.send();
+    const stopped = h.orchestrator.stopGeneration();
+    release();
+    await stopped;
+    await send;
+
+    // The run was cancelled at arm time. Without that, nothing would ever abort
+    // it, the fake would wait forever, and `stopped` would never settle.
+    const stoppedTurn = assistantMessages(h.onDisk("conversation-A"));
+    expect(stoppedTurn).toHaveLength(1);
+    expect(stoppedTurn[0].interrupted).toBe(true);
+    expect(stream).toHaveBeenCalledTimes(1);
+    expect(h.orchestrator.getIsGenerating()).toBe(false);
+  });
+
+  it("settles immediately when nothing is generating", async () => {
+    const h = await harness();
+    await expect(h.orchestrator.stopGeneration()).resolves.toBeUndefined();
+  });
 });

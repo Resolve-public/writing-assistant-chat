@@ -37,12 +37,11 @@ export class ChatConversationController {
       }
     }
 
-    const orchestrator = this.deps.getOrchestrator();
-    if (orchestrator.getIsGenerating()) {
-      orchestrator.stopGeneration();
-    }
+    // The store writes to whichever conversation is active, so the stopped run
+    // must finish its terminal write here before another conversation loads.
+    await this.deps.getOrchestrator().stopGeneration();
 
-    await store.persistActiveConversation();
+    await store.persistActiveConversation({ leaving: true });
     await store.newConversation();
     this.deps.onNewConversation?.();
     await this.deps.syncConversationUi();
@@ -59,12 +58,11 @@ export class ChatConversationController {
       return;
     }
 
-    const orchestrator = this.deps.getOrchestrator();
-    if (orchestrator.getIsGenerating()) {
-      orchestrator.stopGeneration();
-    }
+    // The store writes to whichever conversation is active, so the stopped run
+    // must finish its terminal write here before another conversation loads.
+    await this.deps.getOrchestrator().stopGeneration();
 
-    await store.persistActiveConversation();
+    await store.persistActiveConversation({ leaving: true });
     const didSwitch = await store.switchToConversation(id);
     if (!didSwitch) return;
 
@@ -76,6 +74,11 @@ export class ChatConversationController {
   async deleteConversation(id: string): Promise<void> {
     const store = this.deps.getStore();
     if (!store) return;
+
+    // Deleting the active conversation loads another one in its place.
+    if (id === store.getActiveConversationId()) {
+      await this.deps.getOrchestrator().stopGeneration();
+    }
 
     await store.deleteConversation(id);
     await this.deps.syncConversationUi();
