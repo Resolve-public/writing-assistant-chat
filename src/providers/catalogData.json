@@ -1,5 +1,5 @@
 {
-  "asOf": "2026-10-07",
+  "asOf": "2026-11-19",
   "source": "https://openrouter.ai/api/v1/models",
   "providers": {
     "anthropic": [
@@ -13,6 +13,13 @@
       {
         "modelId": "claude-fable-5-1",
         "name": "Claude Fable 5.1",
+        "role": "completion",
+        "contextWindowSize": 1000000,
+        "vision": true
+      },
+      {
+        "modelId": "claude-fable-5-2",
+        "name": "Claude Fable 5.2",
         "role": "completion",
         "contextWindowSize": 1000000,
         "vision": true
@@ -78,13 +85,6 @@
         "name": "Claude Opus 5.5",
         "role": "completion",
         "contextWindowSize": 1000000,
-        "vision": true
-      },
-      {
-        "modelId": "claude-sonnet-4",
-        "name": "Claude Sonnet 4",
-        "role": "completion",
-        "contextWindowSize": 200000,
         "vision": true
       },
       {
@@ -410,17 +410,45 @@
         "vision": true
       },
       {
-        "modelId": "o1",
-        "name": "o1",
+        "modelId": "gpt-6.1-terra",
+        "name": "GPT-6.1 Terra",
         "role": "completion",
-        "contextWindowSize": 200000,
+        "contextWindowSize": 1050000,
         "vision": true
       },
       {
-        "modelId": "o1-pro",
-        "name": "o1-pro",
+        "modelId": "gpt-6.1-terra-pro",
+        "name": "GPT-6.1 Terra Pro",
         "role": "completion",
-        "contextWindowSize": 200000,
+        "contextWindowSize": 1050000,
+        "vision": true
+      },
+      {
+        "modelId": "gpt-6.2-astra",
+        "name": "GPT-6.2 Astra",
+        "role": "completion",
+        "contextWindowSize": 1050000,
+        "vision": true
+      },
+      {
+        "modelId": "gpt-6.2-astra-pro",
+        "name": "GPT-6.2 Astra Pro",
+        "role": "completion",
+        "contextWindowSize": 1050000,
+        "vision": true
+      },
+      {
+        "modelId": "gpt-6.2-sol",
+        "name": "GPT-6.2 Sol",
+        "role": "completion",
+        "contextWindowSize": 1050000,
+        "vision": true
+      },
+      {
+        "modelId": "gpt-6.2-sol-pro",
+        "name": "GPT-6.2 Sol Pro",
+        "role": "completion",
+        "contextWindowSize": 1050000,
         "vision": true
       },
       {
@@ -431,36 +459,8 @@
         "vision": true
       },
       {
-        "modelId": "o3-mini",
-        "name": "o3 Mini",
-        "role": "completion",
-        "contextWindowSize": 200000,
-        "vision": false
-      },
-      {
-        "modelId": "o3-mini-high",
-        "name": "o3 Mini High",
-        "role": "completion",
-        "contextWindowSize": 200000,
-        "vision": false
-      },
-      {
         "modelId": "o3-pro",
         "name": "o3 Pro",
-        "role": "completion",
-        "contextWindowSize": 200000,
-        "vision": true
-      },
-      {
-        "modelId": "o4-mini",
-        "name": "o4 Mini",
-        "role": "completion",
-        "contextWindowSize": 200000,
-        "vision": true
-      },
-      {
-        "modelId": "o4-mini-high",
-        "name": "o4 Mini High",
         "role": "completion",
         "contextWindowSize": 200000,
         "vision": true
