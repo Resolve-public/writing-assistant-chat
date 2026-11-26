@@ -15,10 +15,16 @@ describe("approval form rendering security", () => {
 
     expect(form).not.toMatch(/\b(?:innerHTML|outerHTML|insertAdjacentHTML)\b/u);
     expect(form).not.toContain("MarkdownRenderer");
-    expect(form).not.toMatch(/createEl\(\s*["']a["']/u);
-    expect(form).not.toMatch(/\b(?:href|src)\s*:/u);
+    // One anchor only: the target-note link, whose href is a constant. The path it opens
+    // goes to the opener callback, never into an attribute.
+    expect(form.match(/createEl\(\s*["']a["']/gu)).toHaveLength(1);
+    expect(form).not.toMatch(/\bhref\s*:(?!\s*"#")/u);
+    expect(form).not.toMatch(/\bsrc\s*:/u);
     expect(form).not.toMatch(/\bstyle\s*:/u);
-    expect(form).toContain("text: request.summary");
+    expect(form).toContain("summaryEl.setText(request.summary)");
+    expect(form).toContain("summaryEl.appendText(parts.before)");
+    expect(form).toContain("text: parts.link");
+    expect(form).toContain("summaryEl.appendText(parts.after)");
     expect(form).toContain("text: request.detail");
     expect(form).toContain("text: copy.label");
     expect(form).toContain("text: copy.description");
@@ -63,9 +69,12 @@ describe("approval form rendering security", () => {
   it("carries no navigation, no error slot, and no review surface", () => {
     const form = source("src/chat/composer/ApprovalForm.ts");
 
-    // D3: the drawer carries no navigation back to the timeline.
+    // D3: the drawer carries no navigation back to the timeline. Opening the target note
+    // is the one navigation it carries (D3 amendment), and it goes through the callback.
     expect(form).not.toContain("Show on timeline");
     expect(form).not.toContain("scrollIntoView");
+    expect(form).not.toContain("openLinkText");
+    expect(form).toContain("this.callbacks.onOpenTarget(target, event as MouseEvent)");
     // D2: submitting settles the interaction, so there is nothing left to report.
     expect(form).not.toContain("lmsa-approval-form-error");
     expect(form).not.toContain("role: \"alert\"");

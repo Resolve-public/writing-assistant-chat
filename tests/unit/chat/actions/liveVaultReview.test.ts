@@ -959,6 +959,7 @@ describe("LiveVaultReview live approval routing", () => {
       toolCallId: "e1",
       summary: "Edit Notes/A.md",
       detail: "Line 2",
+      target: { path: "Notes/A.md", line: 2 },
     });
 
     approvals.submit({ kind: "approve" });

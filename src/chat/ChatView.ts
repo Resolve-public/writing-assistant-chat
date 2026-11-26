@@ -1,5 +1,5 @@
 import type { WorkspaceLeaf } from "obsidian";
-import { ItemView } from "obsidian";
+import { ItemView, Keymap } from "obsidian";
 import type { ApprovalPosture, ProviderProfile, ReasoningLevel } from "../shared/types";
 import type { DocumentContext } from "../shared/chatRequest";
 import type WritingAssistantChat from "../main";
@@ -169,7 +169,18 @@ export class ChatView extends ItemView {
         this.contextUpdater?.immediateUpdate(this.buildContextInputs());
       },
     });
-    this.interactionHost = new ComposerInteractionHost(this.layout);
+    this.interactionHost = new ComposerInteractionHost(this.layout, {
+      onOpenNote: (target, event) => {
+        void this.app.workspace.openLinkText(
+          target.path,
+          "",
+          Keymap.isModEvent(event),
+          target.line === undefined
+            ? undefined
+            : { eState: { line: Math.max(0, target.line - 1) } },
+        );
+      },
+    });
 
     if (this.layout) {
       this.layout.rootEl.dataset.posture = this.composer?.getPosture() ?? "ask";

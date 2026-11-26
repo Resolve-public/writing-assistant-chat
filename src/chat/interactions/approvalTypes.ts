@@ -27,6 +27,18 @@ export interface ApprovalRequest {
   summary: string;
   /** Optional second line, e.g. an op's target path or an edit's start line. */
   detail?: string;
+  /**
+   * The existing note this change lands in, when there is exactly one. The drawer floats
+   * over the transcript and the note, so it renders this path inside `summary` as a link
+   * that opens the note, the same way a diff card's file name does.
+   */
+  target?: ApprovalTarget;
+}
+
+/** A note the drawer can open. `line` is 1-based, as the edit pipeline reports it. */
+export interface ApprovalTarget {
+  path: string;
+  line?: number;
 }
 
 export type ApprovalDecision =

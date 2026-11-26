@@ -1,9 +1,11 @@
 import { setIcon } from "obsidian";
 
+import { splitSummaryAtTarget } from "../interactions/approvalRequests";
 import type {
   ApprovalChannel,
   ApprovalDecision,
   ApprovalRequest,
+  ApprovalTarget,
 } from "../interactions/approvalTypes";
 import {
   buildApprovalDecision,
@@ -26,6 +28,8 @@ export interface ApprovalFormRefs {
 
 export interface ApprovalFormCallbacks {
   onSubmit: (decision: ApprovalDecision) => void;
+  /** Open the request's target note. Mod-click semantics are the opener's to read. */
+  onOpenTarget: (target: ApprovalTarget, event: MouseEvent) => void;
 }
 
 /** What kind of change is waiting. Shapes the eyebrow wording only, never policy. */
@@ -93,7 +97,8 @@ let nextFormId = 0;
  * Deliberately not a review surface: no diffs, no hunk navigation, no op detail beyond
  * the derived summary and detail lines, and no navigation back to the timeline. The
  * evidence stays on the timeline, which renders it correctly at a width the composer
- * does not have.
+ * does not have. The target note's path is a link that opens the note, like a diff
+ * card's file name, because the drawer floats over whatever would otherwise show it.
  *
  * There is no error slot. Submitting settles the interaction unconditionally, so the
  * form has nothing left to report; a failed apply is reported to the model as a failure
@@ -217,16 +222,47 @@ export class ApprovalForm {
     const legendEl = fieldsetEl.createEl("legend", {
       cls: "lmsa-approval-form-legend",
     });
-    legendEl.createSpan({
-      cls: "lmsa-approval-form-summary",
-      text: request.summary,
-    });
+    const summaryEl = legendEl.createSpan({ cls: "lmsa-approval-form-summary" });
+    if (request.target) {
+      this.renderTargetSummary(summaryEl, request.summary, request.target);
+    } else {
+      summaryEl.setText(request.summary);
+    }
     if (request.detail) {
       legendEl.createSpan({
         cls: "lmsa-approval-form-detail",
         text: request.detail,
       });
     }
+  }
+
+  /**
+   * The summary with its target path as an internal link. Opening a note decides
+   * nothing, so the link stays live after the form is disabled.
+   */
+  private renderTargetSummary(
+    summaryEl: HTMLElement,
+    summary: string,
+    target: ApprovalTarget,
+  ): void {
+    const parts = splitSummaryAtTarget(summary, target.path);
+    if (parts.before) summaryEl.appendText(parts.before);
+    const linkEl = summaryEl.createEl("a", {
+      cls: "lmsa-approval-form-target internal-link",
+      text: parts.link,
+      attr: {
+        href: "#",
+        "aria-label":
+          target.line === undefined
+            ? `Open ${target.path}`
+            : `Open ${target.path} at line ${target.line}`,
+      },
+    });
+    this.listen(linkEl, "click", (event) => {
+      event.preventDefault();
+      this.callbacks.onOpenTarget(target, event as MouseEvent);
+    });
+    if (parts.after) summaryEl.appendText(parts.after);
   }
 
   /** Minimize the decision out of the way, and bring it back. Mirrors the ask form. */

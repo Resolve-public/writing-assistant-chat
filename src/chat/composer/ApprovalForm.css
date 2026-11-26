@@ -43,6 +43,17 @@
   line-height: 1.5;
 }
 
+/* Matches the diff card's file-name link, so the same path behaves the same everywhere. */
+.lmsa-approval-form-target {
+  color: var(--text-accent);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.lmsa-approval-form-target:hover {
+  text-decoration: underline;
+}
+
 .lmsa-approval-form-detail {
   overflow-wrap: anywhere;
   color: var(--text-muted);

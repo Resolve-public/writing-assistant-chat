@@ -142,7 +142,7 @@ function createHost() {
     actionBtn: new FakeElement(),
   };
   return {
-    host: new ComposerInteractionHost(refs as never),
+    host: new ComposerInteractionHost(refs as never, { onOpenNote: () => undefined }),
     refs,
   };
 }

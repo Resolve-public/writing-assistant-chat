@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   editApprovalRequest,
   memoryApprovalRequest,
+  splitSummaryAtTarget,
   vaultOpApprovalRequest,
 } from "../../../../src/chat/interactions/approvalRequests";
 import type { VaultOperation } from "../../../../src/vault-ops/types";
@@ -124,6 +125,46 @@ describe("vaultOpApprovalRequest", () => {
     ]);
     expect(summaries.every((request) => request.channel === "vault-op")).toBe(true);
   });
+
+  it("targets only an existing single note: overwrite, trash, and a move's source", () => {
+    const targets = [CREATE, OVERWRITE, DIR, MOVE, TRASH, MOVE_FOLDER, TRASH_FOLDER, REPLACE].map(
+      (op) => vaultOpApprovalRequest({ approvalId: "op", toolCallId: "call", op }).target,
+    );
+
+    expect(targets).toEqual([
+      undefined,
+      { path: "Notes/Alice.md" },
+      undefined,
+      { path: "a.md" },
+      { path: "a.md" },
+      undefined,
+      undefined,
+      undefined,
+    ]);
+  });
+});
+
+describe("splitSummaryAtTarget", () => {
+  it("cuts the summary around the path so only the path is the link", () => {
+    expect(splitSummaryAtTarget("Overwrite Notes/Alice.md (2 B)", "Notes/Alice.md")).toEqual({
+      before: "Overwrite ",
+      link: "Notes/Alice.md",
+      after: " (2 B)",
+    });
+    expect(splitSummaryAtTarget("Move a.md → b.md", "a.md")).toEqual({
+      before: "Move ",
+      link: "a.md",
+      after: " → b.md",
+    });
+  });
+
+  it("makes the whole summary the link when the path is not in it", () => {
+    expect(splitSummaryAtTarget("Something else", "Notes/Alice.md")).toEqual({
+      before: "",
+      link: "Something else",
+      after: "",
+    });
+  });
 });
 
 describe("editApprovalRequest", () => {
@@ -142,6 +183,7 @@ describe("editApprovalRequest", () => {
       toolCallId: "call-2",
       summary: "Edit Chapters/The War.md",
       detail: "Line 42",
+      target: { path: "Chapters/The War.md", line: 42 },
     });
   });
 

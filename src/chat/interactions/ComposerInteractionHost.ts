@@ -5,7 +5,11 @@ import type {
 import { ApprovalForm } from "../composer/ApprovalForm";
 import { AskQuestionForm } from "../composer/AskQuestionForm";
 import type { ChatLayoutRefs } from "../types";
-import type { ApprovalDecision, ApprovalRequest } from "./approvalTypes";
+import type {
+  ApprovalDecision,
+  ApprovalRequest,
+  ApprovalTarget,
+} from "./approvalTypes";
 
 /**
  * The drawer serves two producers, discriminated on `kind`. They share a mount point
@@ -45,6 +49,11 @@ type ComposerInteractionHostRefs = Pick<
   | "actionBtn"
 >;
 
+export interface ComposerInteractionHostCallbacks {
+  /** Open the note an approval is about. The host has no app; the view does. */
+  onOpenNote: (target: ApprovalTarget, event: MouseEvent) => void;
+}
+
 /** The lifecycle both forms implement; the host needs nothing else from them. */
 interface MountedForm {
   disable(): void;
@@ -60,7 +69,10 @@ export class ComposerInteractionHost implements ComposerInteractionHostPort {
   private active: ActiveInteraction | null = null;
   private destroyed = false;
 
-  constructor(private readonly refs: ComposerInteractionHostRefs) {
+  constructor(
+    private readonly refs: ComposerInteractionHostRefs,
+    private readonly callbacks: ComposerInteractionHostCallbacks,
+  ) {
     this.setInteractionVisible(null);
   }
 
@@ -109,7 +121,10 @@ export class ComposerInteractionHost implements ComposerInteractionHostPort {
           request: interaction.request,
         },
         refs,
-        { onSubmit: interaction.onSubmit },
+        {
+          onSubmit: interaction.onSubmit,
+          onOpenTarget: this.callbacks.onOpenNote,
+        },
       );
     }
     return new AskQuestionForm(
