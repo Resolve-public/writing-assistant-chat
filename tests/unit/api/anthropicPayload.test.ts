@@ -7,6 +7,7 @@ import {
   anthropicModelSupportsSystemRole,
 } from "../../../src/api/buildAnthropicPayload";
 import type { AnthropicMessage } from "../../../src/api/buildAnthropicPayload";
+import { NOTE_ATTACHMENT_ROLE } from "../../../src/api/contextFormatting";
 import type { ChatRequest, ChatTurn } from "../../../src/shared/chatRequest";
 import type {
   SamplingParams,
@@ -176,7 +177,10 @@ describe("buildAnthropicMessages", () => {
       role: "user",
       content: [
         { type: "text", text: "What about this?" },
-        { type: "text", text: "---\nAttached note (notes/topic.md):\nNote body" },
+        {
+          type: "text",
+          text: `<attached_note path="notes/topic.md">\n${NOTE_ATTACHMENT_ROLE}\n<content>\nNote body\n</content>\n</attached_note>`,
+        },
       ],
     }]);
   });

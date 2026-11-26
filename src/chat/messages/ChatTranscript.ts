@@ -543,7 +543,7 @@ export class ChatTranscript {
         setIcon(chipEl.createSpan({ cls: "lmsa-chat-window-attachment-note-icon" }), "file-text");
         chipEl.createSpan({
           cls: "lmsa-chat-window-attachment-note-label",
-          text: attachment.truncated ? `${attachment.fileName} ﾂｷ truncated` : attachment.fileName,
+          text: attachment.truncated ? `${attachment.fileName} · truncated` : attachment.fileName,
         });
       }
     }

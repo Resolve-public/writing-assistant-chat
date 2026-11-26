@@ -78,7 +78,7 @@ describe("buildClaudeCodePrompt", () => {
     );
     // Opening turn, so no speaker label; the attachment still renders.
     expect(prompt).toContain("About this note");
-    expect(prompt).toContain("Attached note (notes/topic.md):");
+    expect(prompt).toContain('<attached_note path="notes/topic.md">');
     expect(prompt).toContain("Frozen body");
   });
 

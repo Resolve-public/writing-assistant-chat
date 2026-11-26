@@ -3,6 +3,7 @@ import {
   estimateTokenCount,
   anchoredContextEstimate,
   lastReportedContextWindow,
+  NOTE_ATTACHMENT_WRAPPER_CHARS,
 } from "../../../src/shared/tokenEstimation";
 import type { ChatRequest } from "../../../src/shared/chatRequest";
 import type { ConversationMessage } from "../../../src/shared/types";
@@ -91,8 +92,8 @@ describe("estimateTokenCount", () => {
       }],
     });
     const result = estimateTokenCount(request);
-    // 1 (content) + note: filePath.length + 120 + 30; image excluded.
-    const expectedChars = 1 + ("a.md".length + 120 + 30);
+    // 1 (content) + note: filePath.length + 120 + wrapper; image excluded.
+    const expectedChars = 1 + ("a.md".length + 120 + NOTE_ATTACHMENT_WRAPPER_CHARS);
     expect(result).toBe(Math.ceil(expectedChars / 4));
   });
 
@@ -199,7 +200,9 @@ describe("anchoredContextEstimate", () => {
         ],
       }),
     ];
-    expect(anchoredContextEstimate(messages)).toBe(5000 + Math.ceil(("a.md".length + 120 + 30) / 4));
+    expect(anchoredContextEstimate(messages)).toBe(
+      5000 + Math.ceil(("a.md".length + 120 + NOTE_ATTACHMENT_WRAPPER_CHARS) / 4),
+    );
   });
 });
 

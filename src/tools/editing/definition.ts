@@ -9,8 +9,8 @@ export const EDIT_TOOL: CanonicalToolDefinition = {
   name: "edit",
   description:
     "Propose a targeted search-and-replace edit to a note. " +
-    "Always pass `path`, the vault-relative path of the note to change (the one shown as the " +
-    "document to edit, or the path you read with read). " +
+    "Always pass `path`, the vault-relative path of the note to change (an attached note's " +
+    "`path`, or the path you read with read). " +
     "The edit is shown to the user for review before being applied. " +
     "The note must already contain the search text, for an empty or brand-new note, " +
     "use write_file to set its initial content instead. " +
@@ -32,7 +32,7 @@ export const EDIT_TOOL: CanonicalToolDefinition = {
         type: "string",
         description:
           "Vault-relative path of the note to edit (e.g. \"Lore/The Fold.md\"). " +
-          "Use the path of the document under edit or the file you read with read.",
+          "Use an attached note's path or the file you read with read.",
       },
       search: {
         type: "string",
@@ -151,7 +151,7 @@ export const INSERT_INTO_NOTE_TOOL: CanonicalToolDefinition = {
         type: "string",
         description:
           "Vault-relative path of the note to add to (e.g. \"Journal/2026-06-27.md\"). " +
-          "Use the path of the document under edit or the file you read with read.",
+          "Use an attached note's path or the file you read with read.",
       },
       content: {
         type: "string",

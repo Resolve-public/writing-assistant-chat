@@ -1,6 +1,11 @@
 import type { ChatClient } from "../../api/chatClient";
 import type { CompletionResult } from "../../api/usageTypes";
-import type { AnthropicCacheSettings, CompletionModel, SamplingParams } from "../../shared/types";
+import type {
+  AnthropicCacheSettings,
+  CompletionModel,
+  NoteAttachment,
+  SamplingParams,
+} from "../../shared/types";
 import type { ChatRequest } from "../../shared/chatRequest";
 import type { BenchmarkTestCase, BenchmarkRunResult, BenchmarkIterationResult } from "./types";
 
@@ -10,6 +15,51 @@ function isAbortError(err: unknown): boolean {
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** Vault-relative path the fixture document is presented under. */
+export const BENCHMARK_DOCUMENT_PATH = "test-document.md";
+
+/**
+ * Build the request a test case sends, framed the way a real chat frames it: the
+ * fixture document rides the latest user turn as a note attachment, and no live
+ * document context is sent (a real chat always sends none). A benchmark that framed
+ * the document differently would score a prompt users never see.
+ *
+ * The attachment sits on the latest user turn, as if the user attached the note to
+ * the message being answered, so it carries the document's current state.
+ */
+export function buildBenchmarkRequest(
+  testCase: BenchmarkTestCase,
+  cacheSettings?: AnthropicCacheSettings,
+): ChatRequest {
+  const lastUserIndex = testCase.messages.map((m) => m.role).lastIndexOf("user");
+  const document: NoteAttachment = {
+    type: "note",
+    id: `benchmark-${testCase.id}`,
+    filePath: BENCHMARK_DOCUMENT_PATH,
+    fileName: BENCHMARK_DOCUMENT_PATH.replace(/\.md$/, ""),
+    content: testCase.document,
+    truncated: false,
+    mtimeSnapshot: 0,
+  };
+
+  const request: ChatRequest = {
+    systemPrompt: testCase.systemPromptSuffix,
+    documentContext: null,
+    ragContext: null,
+    messages: testCase.messages.map((m, i) => ({
+      role: m.role,
+      content: m.content,
+      ...(i === lastUserIndex ? { attachments: [document] } : {}),
+    })),
+    tools: testCase.tools,
+  };
+
+  if (cacheSettings?.enabled) {
+    request.anthropicCacheSettings = cacheSettings;
+  }
+  return request;
 }
 
 /**
@@ -33,24 +83,7 @@ export async function runBenchmarkTest(
   signal?: AbortSignal,
   cacheSettings?: AnthropicCacheSettings,
 ): Promise<BenchmarkRunResult> {
-  const request: ChatRequest = {
-    systemPrompt: testCase.systemPromptSuffix,
-    documentContext: {
-      filePath: "test-document.md",
-      content: testCase.document,
-      isFull: true,
-    },
-    ragContext: null,
-    messages: testCase.messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    })),
-    tools: testCase.tools,
-  };
-
-  if (cacheSettings?.enabled) {
-    request.anthropicCacheSettings = cacheSettings;
-  }
+  const request = buildBenchmarkRequest(testCase, cacheSettings);
 
   const iterations: BenchmarkIterationResult[] = [];
   let runError: string | undefined;

@@ -38,7 +38,7 @@ export interface BenchmarkTestCase {
   id: string;
   name: string;
   description: string;
-  /** Document content injected into the system prompt. */
+  /** Document content, sent as a note attachment on the latest user turn. */
   document: string;
   /** Appended to the model's base system prompt (edit instructions, annotation rule, etc.). */
   systemPromptSuffix: string;

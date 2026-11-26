@@ -8,9 +8,34 @@ import type { AdditionalContextItem, DocumentContext } from "../shared/chatReque
  * Shared across all provider clients so placement and labels stay consistent.
  */
 
-/** A frozen note snapshot attached to a user turn. */
+/**
+ * Says what an attached note is for. Without it, smaller models read the note as
+ * text to quote and propose edits whose replace repeats the search unchanged. It
+ * names both uses, because the plugin cannot know whether the user attached a note
+ * to change it or to consult it. It stays tool-neutral since it also reaches turns
+ * that have no edit tools.
+ */
+export const NOTE_ATTACHMENT_ROLE =
+  "The user attached this note to their message. It is a snapshot taken when the message " +
+  "was sent: use it as reference, or edit the note if the request asks for changes.";
+
+/**
+ * A frozen note snapshot attached to a user turn. The wrapper is closed, so the model
+ * can tell where the note ends, and uses no `---`, which would blur into a note's own
+ * frontmatter fence. The body sits in its own element so the role sentence is never
+ * mistaken for note text to match against. The body is not escaped: escaping would
+ * change the exact text the model copies into an edit's search, and a note containing
+ * a literal `</content>` is not a case that has been observed.
+ */
 export function formatNoteAttachment(note: NoteAttachment): string {
-  return `---\nAttached note (${note.filePath}):\n${note.content}`;
+  return [
+    `<attached_note path="${note.filePath}">`,
+    NOTE_ATTACHMENT_ROLE,
+    "<content>",
+    note.content,
+    "</content>",
+    "</attached_note>",
+  ].join("\n");
 }
 
 /** The live document under edit, re-sent each turn. */

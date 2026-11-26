@@ -9,6 +9,13 @@ import type { ConversationMessage, ProviderOption } from "./types";
 const CHARS_PER_TOKEN = 4;
 
 /**
+ * Characters the note-attachment wrapper adds around a note's path and body
+ * (`formatNoteAttachment` in src/api/contextFormatting.ts). Kept as a number so this
+ * module stays free of runtime imports; a unit test pins it to the real wrapper.
+ */
+export const NOTE_ATTACHMENT_WRAPPER_CHARS = 229;
+
+/**
  * Estimate the token count of a raw string with the same `chars / 4` heuristic
  * {@link estimateTokenCount} uses. For measuring an already-assembled prompt
  * blob (e.g. Claude Code's flat mint prompt) rather than a structured request.
@@ -97,7 +104,8 @@ export function estimateTokenCount(request: ChatRequest, draft?: string): number
     // attachments are excluded (their token cost is tile-based, not char-based).
     for (const attachment of turn.attachments ?? []) {
       if (attachment.type === "note") {
-        totalChars += attachment.filePath.length + attachment.content.length + 30;
+        totalChars +=
+          attachment.filePath.length + attachment.content.length + NOTE_ATTACHMENT_WRAPPER_CHARS;
       }
     }
   }
@@ -198,7 +206,8 @@ export function anchoredContextEstimate(
     tailChars += message.content.length;
     for (const attachment of message.attachments ?? []) {
       if (attachment.type === "note") {
-        tailChars += attachment.filePath.length + attachment.content.length + 30;
+        tailChars +=
+          attachment.filePath.length + attachment.content.length + NOTE_ATTACHMENT_WRAPPER_CHARS;
       }
     }
   }
