@@ -42,6 +42,7 @@ import type {
 class FakeApprovals implements ApprovalRequester {
   readonly raised: ApprovalRequest[] = [];
   private active: ((decision: ApprovalDecision) => void) | null = null;
+  private activeId: string | null = null;
 
   request(
     request: ApprovalRequest,
@@ -52,7 +53,15 @@ class FakeApprovals implements ApprovalRequester {
     if (!isLive()) return false;
     this.raised.push(request);
     this.active = decide;
+    this.activeId = request.approvalId;
     return true;
+  }
+
+  /** A decision made outside the drawer takes its request down, as the real lane does. */
+  release(approvalId: string): void {
+    if (this.activeId !== approvalId) return;
+    this.active = null;
+    this.activeId = null;
   }
 
   get mounted(): boolean {
@@ -63,6 +72,7 @@ class FakeApprovals implements ApprovalRequester {
     const decide = this.active;
     if (!decide) throw new Error("no approval is mounted");
     this.active = null;
+    this.activeId = null;
     decide(decision);
   }
 }

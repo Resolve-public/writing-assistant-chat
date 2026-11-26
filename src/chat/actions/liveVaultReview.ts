@@ -1013,6 +1013,7 @@ export class LiveVaultReview implements VaultOpReviewer {
     if (!deps || !proposal || !parked || proposal.status !== "pending") return;
 
     this.pendingMemories.delete(proposalId);
+    this.approvals?.release(proposalId);
     const before = memoryBeforeMutation(
       proposal.mutation,
       deps.getMemories(),
@@ -1043,6 +1044,7 @@ export class LiveVaultReview implements VaultOpReviewer {
     if (!proposal || !parked || proposal.status !== "pending") return;
 
     this.pendingMemories.delete(proposalId);
+    this.approvals?.release(proposalId);
     proposal.status = "declined";
     parked.resolve({
       content: memoryDispositionMessage(
@@ -1262,11 +1264,16 @@ export class LiveVaultReview implements VaultOpReviewer {
     this.pending.set(opId, { resolve, promise });
   }
 
-  /** Resolve one parked decision. The single place a `pending` entry is retired. */
+  /**
+   * Resolve one parked decision. The single place a `pending` entry is retired, and so
+   * the place the drawer lets go of it: a decision made in the note or on the timeline
+   * would otherwise leave the drawer holding the lane for the rest of the turn.
+   */
   private settleParked(opId: string, outcome: ParkedOutcome): void {
     const parked = this.pending.get(opId);
     if (!parked) return;
     this.pending.delete(opId);
+    this.approvals?.release(opId);
     parked.resolve(outcome);
   }
 
@@ -1503,7 +1510,9 @@ function dispoResult(
  *
  * Reachable only from concurrent Claude Code callbacks: `capRoundToMutation` truncates
  * every plugin-loop round at its first mutating call, so the direct path can never have
- * two approvals in flight at once.
+ * two approvals in flight at once. That holds only because {@link settleParked} releases
+ * the lane when a decision lands outside the drawer; before it did, accepting an edit in
+ * the note left the lane held and the next drained mutation was refused here.
  */
 function approvalLaneBusyFailure(toolName: string): ToolResult {
   return toolFailure({

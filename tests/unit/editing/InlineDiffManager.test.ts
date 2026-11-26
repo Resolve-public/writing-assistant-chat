@@ -11,14 +11,24 @@ function fakeCm() {
   return { dispatch: vi.fn() };
 }
 
-/** A workspace whose active view is swappable between assertions. */
+/**
+ * A workspace whose open Markdown leaves are swappable between assertions. The
+ * active view is kept only to show the manager no longer depends on it.
+ */
 function makeWorkspace() {
   const ws = {
+    leaves: [] as unknown[],
     activeView: null as unknown,
+    getLeavesOfType: vi.fn(() => ws.leaves),
     getActiveViewOfType: vi.fn(() => ws.activeView),
     on: vi.fn(() => ({})),
   };
   return ws;
+}
+
+/** An open Markdown leaf showing `path` in editor `cm`. */
+function leaf(cm: { dispatch: unknown }, path: string) {
+  return { view: { editor: { cm }, file: { path } } };
 }
 
 function makeController(doc: string, search: string, replace: string): EditReviewController {
@@ -42,11 +52,11 @@ function makeController(doc: string, search: string, replace: string): EditRevie
   });
 }
 
-describe("InlineDiffManager, editor.cm extraction + dispatch", () => {
-  it("dispatches the pending hunks into the active editor's view", () => {
+describe("InlineDiffManager, open editors + dispatch", () => {
+  it("dispatches the pending hunks into the target file's editor", () => {
     const cm = fakeCm();
     const ws = makeWorkspace();
-    ws.activeView = { editor: { cm }, file: { path: "note.md" } };
+    ws.leaves = [leaf(cm, "note.md")];
     const manager = new InlineDiffManager({ workspace: ws } as unknown as App);
 
     manager.attach(makeController("The quick brown fox.", "quick", "slow"));
@@ -58,49 +68,73 @@ describe("InlineDiffManager, editor.cm extraction + dispatch", () => {
     expect(effect.value[0]).toMatchObject({ matchedText: "quick", replaceText: "slow" });
   });
 
-  it("clears the overlay when the active file has no registered proposal", () => {
+  it("shows the overlay in an editor that is open but not focused", () => {
+    // The chat drawer takes focus whenever it raises the next approval, so the note
+    // being edited is usually not the active leaf when its hunks arrive.
     const cm = fakeCm();
     const ws = makeWorkspace();
-    ws.activeView = { editor: { cm }, file: { path: "other.md" } };
+    ws.leaves = [leaf(cm, "note.md")];
+    ws.activeView = null;
+    const manager = new InlineDiffManager({ workspace: ws } as unknown as App);
+
+    manager.attach(makeController("The quick brown fox.", "quick", "slow"));
+
+    expect(cm.dispatch).toHaveBeenCalledTimes(1);
+    expect(cm.dispatch.mock.calls[0][0].effects.is(setInlineHunks)).toBe(true);
+  });
+
+  it("shows the overlay in every open editor of the target file", () => {
+    const left = fakeCm();
+    const right = fakeCm();
+    const ws = makeWorkspace();
+    ws.leaves = [leaf(left, "note.md"), leaf(right, "note.md")];
+    const manager = new InlineDiffManager({ workspace: ws } as unknown as App);
+
+    manager.attach(makeController("The quick brown fox.", "quick", "slow"));
+
+    expect(left.dispatch.mock.calls[0][0].effects.is(setInlineHunks)).toBe(true);
+    expect(right.dispatch.mock.calls[0][0].effects.is(setInlineHunks)).toBe(true);
+  });
+
+  it("leaves an editor of another file untouched", () => {
+    const cm = fakeCm();
+    const ws = makeWorkspace();
+    ws.leaves = [leaf(cm, "other.md")];
     const manager = new InlineDiffManager({ workspace: ws } as unknown as App);
 
     manager.attach(makeController("The quick brown fox.", "quick", "slow")); // targets note.md
 
-    expect(cm.dispatch).toHaveBeenCalledTimes(1);
-    expect(cm.dispatch.mock.calls[0][0].effects.is(clearInlineHunks)).toBe(true);
+    expect(cm.dispatch).not.toHaveBeenCalled();
   });
 
-  it("does not throw or dispatch when the active editor exposes no CodeMirror view", () => {
+  it("does not throw or dispatch when an editor exposes no CodeMirror view", () => {
     const ws = makeWorkspace();
-    ws.activeView = { editor: {}, file: { path: "note.md" } }; // guard: no `.cm`
+    ws.leaves = [{ view: { editor: {}, file: { path: "note.md" } } }]; // guard: no `.cm`
     const manager = new InlineDiffManager({ workspace: ws } as unknown as App);
 
     expect(() => manager.attach(makeController("The quick brown fox.", "quick", "slow"))).not.toThrow();
   });
 
-  it("does not throw when no markdown view is active", () => {
+  it("does not throw when no markdown editor is open", () => {
     const ws = makeWorkspace();
-    ws.activeView = null; // guard: getActiveViewOfType returned nothing
     const manager = new InlineDiffManager({ workspace: ws } as unknown as App);
 
     expect(() => manager.attach(makeController("doc with target here", "target", "goal"))).not.toThrow();
   });
 
-  it("clears the previously bound editor when switching to another note", () => {
+  it("clears an editor once it switches to another note", () => {
     const cm = fakeCm();
     const ws = makeWorkspace();
-    ws.activeView = { editor: { cm }, file: { path: "note.md" } };
+    const view = { editor: { cm }, file: { path: "note.md" } };
+    ws.leaves = [{ view }];
     const manager = new InlineDiffManager({ workspace: ws } as unknown as App);
     manager.attach(makeController("The quick brown fox.", "quick", "slow"));
     cm.dispatch.mockClear();
 
-    // User switches to a different note backed by its own editor view.
-    const cm2 = fakeCm();
-    ws.activeView = { editor: { cm: cm2 }, file: { path: "other.md" } };
+    view.file = { path: "other.md" };
     manager.refresh();
 
     expect(cm.dispatch).toHaveBeenCalledTimes(1);
     expect(cm.dispatch.mock.calls[0][0].effects.is(clearInlineHunks)).toBe(true);
-    expect(cm2.dispatch.mock.calls[0][0].effects.is(clearInlineHunks)).toBe(true);
   });
 });

@@ -1,5 +1,13 @@
 import { StateEffect, StateField, type Extension, type Range, type Text } from "@codemirror/state";
-import { Decoration, EditorView, WidgetType, type DecorationSet } from "@codemirror/view";
+import {
+  Decoration,
+  EditorView,
+  ViewPlugin,
+  WidgetType,
+  type DecorationSet,
+  type ViewUpdate,
+} from "@codemirror/view";
+import { describeHunk, trimHunk, type HunkDisplay } from "./hunkDisplay";
 
 /**
  * Maximum character drift tolerated between a hunk's snapshot offset and where
@@ -19,6 +27,11 @@ export interface InlineHunk {
   replaceText: string;
   /** Snapshot offset where the match started, used to re-anchor against drift. */
   matchOffset: number;
+  /**
+   * Render markdown into `el` in the note's context; returns the cleanup to run
+   * when the widget is destroyed.
+   */
+  renderMarkdown: (markdown: string, el: HTMLElement) => () => void;
   onAccept: () => void;
   onReject: () => void;
 }
@@ -61,21 +74,73 @@ function findAnchor(doc: string, hunk: InlineHunk): number | null {
   return best;
 }
 
+/** Margin-note width plus the gap to the text column; below this, notes stay inline. */
+const MARGIN_NOTE_SPACE = 230;
+/** Editor-root class that moves review notes into the right margin. */
+const MARGIN_MODE_CLASS = "lmsa-inline-diff-margin-mode";
+
+/** Per-widget-DOM cleanup for rendered markdown, run from `WidgetType.destroy`. */
+const disposers = new WeakMap<HTMLElement, () => void>();
+
 /**
- * A block widget rendered on its own line beneath the struck range: the proposed
- * replacement (which may span multiple lines) plus inline accept / reject
- * controls. Block layout keeps multi-line replacements readable rather than
- * cramming them inline after the original text.
+ * The review note: what kind of change this is, plus accept / reject. In margin
+ * mode CSS lifts it into the right margin beside its line; otherwise it sits
+ * inline with the change.
  */
-class InlineReplacementWidget extends WidgetType {
-  constructor(private readonly hunk: InlineHunk) {
+function buildReviewNote(parent: HTMLElement, hunk: InlineHunk, display: HunkDisplay): void {
+  const note = parent.createSpan({ cls: "lmsa-inline-diff-note" });
+  note.createSpan({ cls: "lmsa-inline-diff-note-label", text: describeHunk(display) });
+  const actions = note.createSpan({ cls: "lmsa-inline-diff-actions" });
+  addButton(actions, "Accept", "lmsa-inline-diff-btn--accept", hunk.onAccept);
+  addButton(actions, "Reject", "lmsa-inline-diff-btn--reject", hunk.onReject);
+}
+
+function addButton(parent: HTMLElement, label: string, cls: string, onClick: () => void): void {
+  const btn = parent.createEl("button", {
+    cls: `lmsa-inline-diff-btn ${cls}`,
+    attr: { "aria-label": `${label} change`, type: "button" },
+    text: label,
+  });
+  // mousedown + preventDefault so the click doesn't move the editor selection
+  // or steal focus before the handler runs.
+  btn.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onClick();
+  });
+}
+
+abstract class ReviewWidget extends WidgetType {
+  constructor(
+    protected readonly hunk: InlineHunk,
+    protected readonly display: HunkDisplay
+  ) {
     super();
   }
 
-  eq(other: InlineReplacementWidget): boolean {
+  eq(other: ReviewWidget): boolean {
     return other.hunk.id === this.hunk.id && other.hunk.replaceText === this.hunk.replaceText;
   }
 
+  /** Let the widget's own DOM handle clicks rather than the editor. */
+  ignoreEvent(): boolean {
+    return true;
+  }
+
+  destroy(dom: HTMLElement): void {
+    disposers.get(dom)?.();
+    disposers.delete(dom);
+  }
+}
+
+/**
+ * Sits inside a text line: a one-line change's inserted words (if any), then the
+ * review note. A multi-line addition uses it for the note alone, on the line the
+ * block follows. The note always lives in a line rather than in a block widget,
+ * because Obsidian gives block widgets `contain: paint`, which clips anything
+ * positioned outside them, so a margin note inside the block is never painted.
+ */
+class InlineChangeWidget extends ReviewWidget {
   toDOM(view: EditorView): HTMLElement {
     // Build against the editor's own document, not the bare global. A CodeMirror
     // editor can live in a popped-out markdown window independent of our chat view,
@@ -83,37 +148,31 @@ class InlineReplacementWidget extends WidgetType {
     // (ADR-0024). Raw createElement, not createEl: CM6 mounts this root, so
     // it is detached at creation, and createEl cannot target a non-main document
     // (ADR-0026).
+    const root = view.dom.ownerDocument.createElement("span");
+    root.addClass("lmsa-inline-diff-inline");
+    if (this.display.layout === "inline" && this.display.inserted.length > 0) {
+      root.createSpan({ cls: "lmsa-inline-diff-added", text: this.display.inserted });
+    }
+    buildReviewNote(root, this.hunk, this.display);
+    return root;
+  }
+}
+
+/**
+ * A multi-line addition, rendered as markdown on its own lines beneath the change
+ * so headings and lists read like the rest of the note. Its review note is on the
+ * line above, see {@link InlineChangeWidget}.
+ */
+class BlockChangeWidget extends ReviewWidget {
+  toDOM(view: EditorView): HTMLElement {
+    // Raw createElement for the same reason as InlineChangeWidget.toDOM.
     const block = view.dom.ownerDocument.createElement("div");
     block.addClass("lmsa-inline-diff-block");
 
-    const added = block.createDiv({ cls: "lmsa-inline-diff-added" });
-    added.setText(this.hunk.replaceText);
-
-    const actions = block.createDiv({ cls: "lmsa-inline-diff-actions" });
-    this.addButton(actions, "Accept", "lmsa-inline-diff-btn--accept", this.hunk.onAccept);
-    this.addButton(actions, "Reject", "lmsa-inline-diff-btn--reject", this.hunk.onReject);
-
+    const body = block.createDiv({ cls: "lmsa-inline-diff-body markdown-rendered" });
+    const markdown = this.display.inserted.replace(/^\n+|\n+$/g, "");
+    disposers.set(block, this.hunk.renderMarkdown(markdown, body));
     return block;
-  }
-
-  private addButton(parent: HTMLElement, label: string, cls: string, onClick: () => void): void {
-    const btn = parent.createEl("button", {
-      cls: `lmsa-inline-diff-btn ${cls}`,
-      attr: { "aria-label": `${label} change`, type: "button" },
-      text: label,
-    });
-    // mousedown + preventDefault so the click doesn't move the editor selection
-    // or steal focus before the handler runs.
-    btn.addEventListener("mousedown", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      onClick();
-    });
-  }
-
-  /** Let the widget's own DOM handle clicks rather than the editor. */
-  ignoreEvent(): boolean {
-    return true;
   }
 }
 
@@ -124,26 +183,40 @@ function buildDecorations(hunks: InlineHunk[], doc: Text): DecorationSet {
   for (const hunk of hunks) {
     const at = findAnchor(docStr, hunk);
     if (at === null) continue;
-    const end = at + hunk.matchedText.length;
 
-    if (end > at) {
-      ranges.push(Decoration.mark({ class: "lmsa-inline-diff-removed" }).range(at, end));
+    // Decorate only what changes; the untrimmed hunk is still what accept applies.
+    const display = trimHunk(hunk.matchedText, hunk.replaceText);
+    const from = at + display.offset;
+    const to = from + display.removed.length;
+
+    if (to > from) {
+      ranges.push(Decoration.mark({ class: "lmsa-inline-diff-removed" }).range(from, to));
     }
 
-    // Block widgets must sit on a line boundary: anchor it after the line
-    // holding the last matched character (or the insertion point for a pure add).
-    const lineRefPos = end > at ? end - 1 : at;
+    // A one-line change puts its widget right after the change. A block must sit on
+    // a line boundary, so it goes after the line holding the last changed character
+    // (or the insertion point), and its note goes at the end of that same line.
+    const lineRefPos = to > from ? to - 1 : to;
     const blockPos = doc.lineAt(Math.min(lineRefPos, doc.length)).to;
+    const notePos = display.layout === "inline" ? to : blockPos;
+
+    // A positioned line gives the margin note its vertical anchor.
+    ranges.push(Decoration.line({ class: "lmsa-inline-diff-line" }).range(doc.lineAt(notePos).from));
+    ranges.push(
+      Decoration.widget({ widget: new InlineChangeWidget(hunk, display), side: 1 }).range(notePos)
+    );
+    if (display.layout === "inline") continue;
+
     ranges.push(
       Decoration.widget({
-        widget: new InlineReplacementWidget(hunk),
+        widget: new BlockChangeWidget(hunk, display),
         block: true,
         side: 1,
       }).range(blockPos)
     );
   }
 
-  // sort=true lets CodeMirror order the mixed mark/block ranges correctly.
+  // sort=true lets CodeMirror order the mixed mark/line/widget ranges correctly.
   return Decoration.set(ranges, true);
 }
 
@@ -176,5 +249,41 @@ const inlineDiffField = StateField.define<InlineDiffState>({
   provide: (field) => EditorView.decorations.from(field, (v) => v.deco),
 });
 
+/**
+ * Turns margin mode on while the editor has room right of the text column
+ * (readable line width on a wide pane), so review notes sit beside their lines
+ * like comments on a manuscript. Narrow panes keep them inline.
+ */
+const marginModePlugin = ViewPlugin.fromClass(
+  class {
+    constructor(private readonly view: EditorView) {
+      this.measure();
+    }
+
+    update(update: ViewUpdate): void {
+      const before = update.startState.field(inlineDiffField).hunks;
+      const after = update.state.field(inlineDiffField).hunks;
+      if (update.geometryChanged || before !== after) this.measure();
+    }
+
+    private measure(): void {
+      if (this.view.state.field(inlineDiffField).hunks.length === 0) {
+        this.view.dom.removeClass(MARGIN_MODE_CLASS);
+        return;
+      }
+      this.view.requestMeasure({
+        read: (view) =>
+          view.scrollDOM.getBoundingClientRect().right -
+          view.contentDOM.getBoundingClientRect().right,
+        write: (space, view) => view.dom.toggleClass(MARGIN_MODE_CLASS, space >= MARGIN_NOTE_SPACE),
+      });
+    }
+
+    destroy(): void {
+      this.view.dom.removeClass(MARGIN_MODE_CLASS);
+    }
+  }
+);
+
 /** The editor extension to register once via `Plugin.registerEditorExtension`. */
-export const inlineDiffExtension: Extension = [inlineDiffField];
+export const inlineDiffExtension: Extension = [inlineDiffField, marginModePlugin];

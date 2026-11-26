@@ -46,4 +46,11 @@ export interface ApprovalRequester {
     decide: (decision: ApprovalDecision) => void,
     isLive: () => boolean,
   ): boolean;
+  /**
+   * The decision for `approvalId` was made somewhere other than the drawer (the in-note
+   * overlay, a timeline control, decline propagation). Takes the request down and frees
+   * the lane if it still holds that approval; otherwise does nothing. Without it the
+   * drawer keeps offering a settled change and refuses every later one in the turn.
+   */
+  release(approvalId: string): void;
 }

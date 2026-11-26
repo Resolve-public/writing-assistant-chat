@@ -1,64 +1,133 @@
 /* -----------------------------------------------------------------------
  * Inline diff overlay, pending edit proposals rendered in the live editor
- * via a CM6 decoration extension. Colour tokens mirror DiffHunkView.
+ * via a CM6 decoration extension, styled as manuscript suggestions.
  *
- * The matched text is struck through in place (inline mark); the proposed
- * replacement is a block widget on its own line(s) beneath it.
+ * Removed text is struck in place. A one-line addition follows it inline; a
+ * multi-line addition renders as markdown beneath the line. Each change has a
+ * review note (label + accept / reject): beside the text in the right margin
+ * when the editor root has the margin-mode class, inline otherwise.
  * ----------------------------------------------------------------------- */
 
-/* Matched text awaiting review, struck through in place. */
 .lmsa-inline-diff-removed {
-  background: color-mix(in srgb, var(--text-error) 10%, var(--background-primary));
+  background: color-mix(in srgb, var(--text-error) 10%, transparent);
   color: var(--text-muted);
   text-decoration: line-through var(--text-error);
 }
 
-/* The proposed replacement, as a block beneath the struck range. */
-.lmsa-inline-diff-block {
-  margin: 2px 0 6px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  border-left: 3px solid var(--text-success, var(--color-green, var(--interactive-accent)));
-  background: color-mix(in srgb, var(--text-success, var(--color-green, var(--interactive-accent))) 8%, var(--background-primary));
-}
-
+/* A one-line addition, right after what it replaces. */
 .lmsa-inline-diff-added {
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--text-normal);
-  font-family: var(--font-text);
+  background: color-mix(in srgb, var(--color-green) 10%, transparent);
+  text-decoration: underline dotted var(--color-green);
+  text-underline-offset: 4px;
 }
 
-/* Accept / reject controls beneath the replacement. */
-.lmsa-inline-diff-actions {
-  display: flex;
+/* A multi-line addition beneath the changed line, marked by a gutter bar. Obsidian
+ * gives block widgets `contain: paint`, so nothing may draw outside this box: the bar
+ * is a real border, and the box shifts left by its width plus padding so the text
+ * stays aligned with the lines around it. The review note lives on the line above. */
+.lmsa-inline-diff-block {
+  margin: 2px 0 6px -12px;
+  padding-left: 10px;
+  border-left: 2px solid var(--color-green);
+}
+
+.lmsa-inline-diff-body {
+  text-decoration: underline dotted color-mix(in srgb, var(--color-green) 60%, transparent);
+  text-underline-offset: 4px;
+}
+
+.lmsa-inline-diff-body > :first-child {
+  margin-top: 0;
+}
+
+.lmsa-inline-diff-body > :last-child {
+  margin-bottom: 0;
+}
+
+/* Review note, inline layout (narrow panes). */
+.lmsa-inline-diff-note {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
-  margin-top: 6px;
-}
-
-.lmsa-inline-diff-btn {
-  cursor: pointer;
-  border: 1px solid var(--background-modifier-border);
-  background: var(--background-primary);
-  color: var(--text-muted);
-  border-radius: 6px;
-  padding: 1px 10px;
+  margin-left: 6px;
+  font-family: var(--font-interface);
   font-size: var(--font-ui-smaller);
-  line-height: 1.6;
-  transition: all 0.1s ease;
+  font-weight: var(--font-normal);
+  line-height: 1.4;
+  color: var(--text-muted);
+  white-space: normal;
+  text-decoration: none;
+  user-select: none;
+  vertical-align: 1px;
 }
 
-.lmsa-inline-diff-btn:hover {
+.lmsa-inline-diff-actions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.lmsa-inline-diff-actions .lmsa-inline-diff-btn {
+  cursor: pointer;
+  height: auto;
+  border: 1px solid var(--background-modifier-border);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  border-radius: 5px;
+  padding: 1px 9px;
+  font-size: var(--font-ui-smaller);
+  line-height: 1.5;
+  transition:
+    color 0.1s ease,
+    border-color 0.1s ease,
+    background-color 0.1s ease;
+}
+
+.lmsa-inline-diff-actions .lmsa-inline-diff-btn:hover {
   background: var(--background-modifier-hover);
   color: var(--text-normal);
 }
 
-.lmsa-inline-diff-btn--accept:hover {
-  border-color: var(--text-success, var(--color-green, var(--interactive-accent)));
-  color: var(--text-success, var(--color-green, var(--interactive-accent)));
+.lmsa-inline-diff-actions .lmsa-inline-diff-btn--accept {
+  border-color: var(--color-green);
+  color: var(--color-green);
 }
 
-.lmsa-inline-diff-btn--reject:hover {
+.lmsa-inline-diff-actions .lmsa-inline-diff-btn--accept:hover {
+  background: color-mix(in srgb, var(--color-green) 12%, transparent);
+  color: var(--color-green);
+}
+
+.lmsa-inline-diff-actions .lmsa-inline-diff-btn--reject:hover {
   border-color: var(--text-error);
   color: var(--text-error);
+}
+
+/* Review note, margin layout (room right of the text column), positioned against
+ * the text line that holds it. */
+.lmsa-inline-diff-margin-mode .lmsa-inline-diff-line {
+  position: relative;
+}
+
+.lmsa-inline-diff-margin-mode .lmsa-inline-diff-note {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 20px);
+  z-index: 2;
+  width: 190px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s);
+}
+
+.lmsa-inline-diff-margin-mode .lmsa-inline-diff-note-label {
+  color: var(--text-normal);
+  font-weight: var(--font-semibold);
 }

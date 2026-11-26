@@ -102,6 +102,11 @@ export class ApprovalInteractionCoordinator implements ApprovalRequester {
     return true;
   }
 
+  release(approvalId: string): void {
+    const pending = this.pending;
+    if (pending?.approvalId === approvalId) this.clear(pending.interactionId);
+  }
+
   hasPending(): boolean {
     return this.pending !== null;
   }

@@ -1,0 +1,169 @@
+{
+  "description": "Two edits to the open chapter in one message, on neighbouring lines: a multi-line addition, then a one-word change.",
+  "completionText": "",
+  "_comment": [
+    "Both edit calls are in round one on purpose. The loop keeps the first and buffers the second",
+    "(ADR-0011), so whether two review notes are ever on screen at once is what the",
+    "inline-margin-notes scenario observes rather than assumes.",
+    "",
+    "Round one is paced at 400ms a frame for the reason vault-write.json records: a tool call that",
+    "lands too soon after send races the draft save and is refused as unreviewed.",
+    "",
+    "The search texts are lines of Chapters/One.md in the writing-basic fixture, character for",
+    "character. Change one and the other must follow."
+  ],
+  "frames": [
+    {
+      "frameKey": "inline-review:01",
+      "providerMessageKey": "inline-review:msg-1",
+      "delayMs": 700,
+      "facts": [
+        {
+          "type": "segment_start",
+          "segmentId": "r1"
+        }
+      ]
+    },
+    {
+      "frameKey": "inline-review:02",
+      "providerMessageKey": "inline-review:msg-1",
+      "delayMs": 400,
+      "facts": [
+        {
+          "type": "prose_delta",
+          "segmentId": "r1",
+          "delta": "Two small changes to the opening."
+        }
+      ]
+    },
+    {
+      "frameKey": "inline-review:03",
+      "providerMessageKey": "inline-review:msg-1",
+      "delayMs": 400,
+      "facts": [
+        {
+          "type": "tool_call_start",
+          "segmentId": "r1",
+          "declarationKey": "r1-decl-1",
+          "toolName": "edit"
+        }
+      ]
+    },
+    {
+      "frameKey": "inline-review:04",
+      "providerMessageKey": "inline-review:msg-1",
+      "delayMs": 400,
+      "facts": [
+        {
+          "type": "tool_call_delta",
+          "declarationKey": "r1-decl-1",
+          "argumentsDelta": "{\"path\":\"Chapters/One.md\",\"search\":\"never been about the light.\",\"replace\":\"never been about the light.\\n\\nThe door at the top was never locked, and she never asked why.\",\"explanation\":\"Add a beat about the lamp room door.\"}"
+        }
+      ]
+    },
+    {
+      "frameKey": "inline-review:05",
+      "providerMessageKey": "inline-review:msg-1",
+      "delayMs": 400,
+      "facts": [
+        {
+          "type": "tool_call_identity",
+          "declarationKey": "r1-decl-1",
+          "toolCallId": "inline-review-edit-1",
+          "correlation": "provider_id"
+        }
+      ]
+    },
+    {
+      "frameKey": "inline-review:06",
+      "providerMessageKey": "inline-review:msg-1",
+      "delayMs": 400,
+      "facts": [
+        {
+          "type": "tool_call_start",
+          "segmentId": "r1",
+          "declarationKey": "r1-decl-2",
+          "toolName": "edit"
+        }
+      ]
+    },
+    {
+      "frameKey": "inline-review:07",
+      "providerMessageKey": "inline-review:msg-1",
+      "delayMs": 400,
+      "facts": [
+        {
+          "type": "tool_call_delta",
+          "declarationKey": "r1-decl-2",
+          "argumentsDelta": "{\"path\":\"Chapters/One.md\",\"search\":\"The lighthouse had not been lit in eleven years\",\"replace\":\"The lighthouse had not been lit in twelve years\",\"explanation\":\"One more year, to match the timeline note.\"}"
+        }
+      ]
+    },
+    {
+      "frameKey": "inline-review:08",
+      "providerMessageKey": "inline-review:msg-1",
+      "delayMs": 400,
+      "facts": [
+        {
+          "type": "tool_call_identity",
+          "declarationKey": "r1-decl-2",
+          "toolCallId": "inline-review-edit-2",
+          "correlation": "provider_id"
+        }
+      ]
+    },
+    {
+      "frameKey": "inline-review:09",
+      "providerMessageKey": "inline-review:msg-1",
+      "delayMs": 0,
+      "facts": [
+        {
+          "type": "segment_end",
+          "segmentId": "r1"
+        },
+        {
+          "type": "turn_end",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "frameKey": "inline-review:10",
+      "providerMessageKey": "inline-review:msg-2",
+      "delayMs": 600,
+      "facts": [
+        {
+          "type": "segment_start",
+          "segmentId": "r2"
+        }
+      ]
+    },
+    {
+      "frameKey": "inline-review:11",
+      "providerMessageKey": "inline-review:msg-2",
+      "delayMs": 40,
+      "facts": [
+        {
+          "type": "prose_delta",
+          "segmentId": "r2",
+          "delta": "Both changes are in."
+        }
+      ]
+    },
+    {
+      "frameKey": "inline-review:12",
+      "providerMessageKey": "inline-review:msg-2",
+      "delayMs": 0,
+      "facts": [
+        {
+          "type": "segment_end",
+          "segmentId": "r2"
+        },
+        {
+          "type": "turn_end",
+          "status": "completed"
+        }
+      ]
+    }
+  ]
+}

@@ -145,6 +145,28 @@ describe("ApprovalInteractionCoordinator", () => {
     expect(coordinator.request(request("op-2"), vi.fn(), () => true)).toBe(true);
   });
 
+  it("releases the lane when its approval is decided elsewhere, deciding nothing", () => {
+    const coordinator = createCoordinator();
+    const decide = vi.fn();
+    coordinator.request(request("op-1"), decide, () => true);
+
+    coordinator.release("op-1");
+
+    expect(host.isActive()).toBe(false);
+    expect(decide).not.toHaveBeenCalled();
+    expect(coordinator.request(request("op-2"), vi.fn(), () => true)).toBe(true);
+  });
+
+  it("ignores a release for an approval the lane is not holding", () => {
+    const coordinator = createCoordinator();
+    coordinator.request(request("op-1"), vi.fn(), () => true);
+
+    coordinator.release("op-2");
+
+    expect(host.isActive()).toBe(true);
+    expect(coordinator.hasPending()).toBe(true);
+  });
+
   // A bug in one channel's decide must not wedge the lane for the other two.
   it("clears the lane even when decide throws", () => {
     const coordinator = createCoordinator();

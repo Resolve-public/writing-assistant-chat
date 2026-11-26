@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 import type { App } from "obsidian";
 import { TFile, TFolder, normalizePath } from "obsidian";
 import type { ToolCall } from "../../../../src/tools/types";
 import type { VaultOpPolicy } from "../../../../src/vault-ops/gateway";
+import type { EditReviewController } from "../../../../src/editing/EditReviewController";
 
 // Capture what the review view is asked to render, without a real DOM. The view is a
 // record now (RFC-0012), so decisions are driven through the drawer lane below rather
@@ -112,6 +113,11 @@ class FakeApprovals implements ApprovalRequester {
     if (id === undefined || !decide) throw new Error("no approval is mounted");
     this.active.delete(id);
     decide(decision);
+  }
+
+  /** A decision made outside the drawer takes its request down, as the real lane does. */
+  release(approvalId: string): void {
+    this.active.delete(approvalId);
   }
 
   /** Abort / destroy clears the drawer without resolving anything. */
@@ -959,6 +965,47 @@ describe("LiveVaultReview live approval routing", () => {
     const [{ result }] = await pending;
     expect(result.content).toBe('Applied edit to "Notes/A.md".');
     expect(result.disposition).toBe("applied");
+  });
+
+  it("frees the drawer when an edit is accepted in the note, so the next edit is offered", async () => {
+    const approvals = new FakeApprovals();
+    const edit = EDIT_DEPS();
+    const review = new LiveVaultReview({
+      app: makeApp({ files: ["Notes/A.md"], content: "She nodded.\nHe waited.\n" }),
+      timelineEl: TIMELINE_EL,
+      policy: POLICY({ edit: "ask" }),
+      edit,
+      approvals,
+    });
+
+    const first = review.resolveEdits([
+      {
+        id: "e1",
+        name: "edit",
+        arguments: { path: "Notes/A.md", search: "He waited.", replace: "He left." },
+      },
+    ]);
+    await flush();
+
+    // The in-note overlay accepts straight through the controller, never the drawer.
+    const attach = edit.inlineDiff.attach as unknown as Mock;
+    const controller = attach.mock.calls.at(-1)?.[0] as EditReviewController;
+    await controller.accept("e1");
+    expect((await first)[0].result.disposition).toBe("applied");
+    expect(approvals.mounted).toBe(false);
+
+    const second = review.resolveEdits([
+      {
+        id: "e2",
+        name: "edit",
+        arguments: { path: "Notes/A.md", search: "She nodded.", replace: "She smiled." },
+      },
+    ]);
+    await flush();
+    expect(approvals.latest.approvalId).toBe("e2");
+
+    approvals.submit({ kind: "approve" });
+    expect((await second)[0].result.disposition).toBe("applied");
   });
 
   it("carries edit decline guidance through the controller subscription", async () => {
