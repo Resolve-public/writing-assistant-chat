@@ -64,6 +64,18 @@ export interface InsertIntoNoteArgs {
   explanation?: string;
 }
 
+/**
+ * The failure an `edit` gets when its replace text equals its search text. Such a
+ * call changes nothing, and accepting it would queue an empty review while telling the
+ * model it succeeded, so weaker models never learn they dropped their change. Shared by
+ * every site that guards the prose edit channel so the model sees one wording.
+ */
+export const NO_OP_EDIT_FAILURE = {
+  what: "replace is identical to search, so this edit changes nothing",
+  recovery:
+    "put the rewritten passage in replace: the search text with your change applied",
+} as const;
+
 // ---------------------------------------------------------------------------
 // Validators
 // ---------------------------------------------------------------------------

@@ -333,6 +333,27 @@ describe("executeEditTool, edit whitespace-tolerant matching", () => {
     expect(result.isError).toBe(true);
     expect(result.failure?.kind).toBe("no-match");
   });
+
+  test("rejects an edit whose replace equals its search", async () => {
+    const app = mockApp({ fileContent: "He drew the blade slowly." });
+
+    const result = await executeEditTool(
+      {
+        id: "t",
+        name: "edit",
+        arguments: {
+          path: CTX_PATH,
+          search: "He drew the blade slowly.",
+          replace: "He drew the blade slowly.",
+        },
+      },
+      { app, filePath: CTX_PATH },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.failure?.kind).toBe("invalid-args");
+    expect(result.content).toContain("replace is identical to search");
+  });
 });
 
 // ---------------------------------------------------------------------------

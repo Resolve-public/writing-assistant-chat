@@ -8,6 +8,7 @@ import { toolFailure } from "../toolFailure";
 import { refuseOutsideVault } from "../pathBoundary";
 import { EDIT_TOOL_NAMES } from "./definition";
 import {
+  NO_OP_EDIT_FAILURE,
   validateEdit,
   validateInsertIntoNote,
   validateUpdateFrontmatter,
@@ -136,6 +137,10 @@ async function executeEdit(
       recovery: "pass the exact text you want to replace",
       isReadOnly: false,
     });
+  }
+
+  if (searchText === normalizeEscapes(v.args.replace)) {
+    return toolFailure({ kind: "invalid-args", ...NO_OP_EDIT_FAILURE, isReadOnly: false });
   }
 
   // An explicit out-of-vault `path` is named at the boundary before resolution,

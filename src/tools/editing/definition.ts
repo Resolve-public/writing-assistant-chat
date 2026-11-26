@@ -47,7 +47,8 @@ export const EDIT_TOOL: CanonicalToolDefinition = {
       replace: {
         type: "string",
         description:
-          "The replacement text for the matched search region only. " +
+          "The text that takes the place of the matched search region: that same passage " +
+          "rewritten with your change applied, so it must differ from search. " +
           "Must contain ONLY the new content for that region, not the rest of the document. " +
           "Use an empty string to delete the matched text.",
       },

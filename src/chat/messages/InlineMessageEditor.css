@@ -1,22 +1,20 @@
 /* Edit in place: no frame, no extra box. The textarea is transparent, borderless,
    and font: inherit, so the caret drops into the same text the reader was looking
-   at, sitting in the bubble exactly where the rendered content was. The bubble's
-   own card (user) or transparent body (assistant) is left untouched. */
+   at, sitting in the bubble exactly where the rendered content was. It grows with
+   its content (field-sizing), so the transcript stays the only scroll region. The
+   bubble's own card (user) or transparent body (assistant) is left untouched. */
 .lmsa-chat-window-inline-editor-textarea {
-  --lmsa-edit-bar: 2px solid color-mix(in srgb, var(--lmsa-mode-accent) 55%, transparent);
   @apply lmsa:w-full lmsa:resize-none;
   margin: 0;
-  padding: 0 0.6rem;
+  padding: 0;
   border: none;
-  border-inline: var(--lmsa-edit-bar);
   background: transparent;
   color: var(--text-normal);
   font: inherit;
   line-height: 1.68;
-  max-height: 360px;
   min-height: 2.6em;
   field-sizing: content;
-  overflow-y: auto;
+  overflow: hidden;
   white-space: pre-wrap;
   outline: none;
   box-shadow: none;
@@ -27,10 +25,9 @@
   grid-column: 2;
 }
 
-/* A slim accent bar on each side marks edit mode without enclosing the text. The
-   paired reset strips the form-field chrome Obsidian adds on hover/focus, that ring
-   is the "box" that otherwise appeared, while keeping the bars. Body-scoped so it
-   clears Obsidian's core input focus rule without !important. */
+/* Strip the form-field chrome Obsidian adds on hover/focus, that ring is the "box"
+   that otherwise appears. Body-scoped so it clears Obsidian's core input focus rule
+   without !important. */
 .lmsa-chat-window-message-body .lmsa-chat-window-inline-editor-textarea:hover,
 .lmsa-chat-window-message-body .lmsa-chat-window-inline-editor-textarea:focus,
 .lmsa-chat-window-message-body .lmsa-chat-window-inline-editor-textarea:focus-visible,
@@ -38,10 +35,77 @@
 .lmsa-assistant-turn .lmsa-chat-window-inline-editor-textarea:focus,
 .lmsa-assistant-turn .lmsa-chat-window-inline-editor-textarea:focus-visible {
   border: none;
-  border-inline: var(--lmsa-edit-bar);
   background: transparent;
   box-shadow: none;
   outline: none;
+}
+
+/* The turn's own timeline rail marks the text being edited, as one unbroken line
+   that changes tone. The incoming connector (::before) stays solid, overriding the
+   last item's fading endpoint, and blends from the border colour into a muted
+   accent as it reaches the text. The outgoing connector (::after, from the marker
+   centre down) carries that accent the full height of the text, then blends back
+   to the border colour where it meets the next item, or, on the last item, where
+   it exists only while editing, fades out the way the rail's endpoint does. */
+.lmsa-assistant-turn-item.is-editing {
+  --lmsa-edit-rail: color-mix(
+    in srgb,
+    var(--lmsa-mode-accent) 65%,
+    var(--background-modifier-border)
+  );
+  --lmsa-edit-rail-blend: 2.5rem;
+}
+
+.lmsa-assistant-turn-item.is-editing::before {
+  background: linear-gradient(
+    to bottom,
+    var(--background-modifier-border),
+    var(--lmsa-edit-rail)
+  );
+}
+
+.lmsa-assistant-turn-item.is-editing::after {
+  background: linear-gradient(
+    to bottom,
+    var(--lmsa-edit-rail),
+    var(--lmsa-edit-rail) calc(100% - var(--lmsa-edit-rail-blend)),
+    var(--background-modifier-border)
+  );
+}
+
+.lmsa-assistant-turn-item.is-editing:not(.has-connector-after)::after {
+  display: block;
+  bottom: 0;
+  background: linear-gradient(
+    to bottom,
+    var(--lmsa-edit-rail),
+    var(--lmsa-edit-rail) calc(100% - var(--lmsa-edit-rail-blend)),
+    transparent
+  );
+}
+
+/* The footer names the state and its keys in the usage figures' place. */
+.lmsa-chat-window-message.is-editing .lmsa-chat-window-usage-badge {
+  display: none;
+}
+
+.lmsa-chat-window-inline-editor-hint {
+  @apply lmsa:inline-flex lmsa:items-center lmsa:gap-1.5;
+  padding-top: 5px;
+  font-size: var(--font-smallest);
+  color: var(--text-muted);
+}
+
+.lmsa-chat-window-inline-editor-hint-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--lmsa-mode-accent);
+}
+
+.lmsa-chat-window-inline-editor-hint-state {
+  color: var(--lmsa-mode-accent);
+  font-weight: var(--font-semibold);
 }
 
 /* Save is a bubble action button (inherits .lmsa-chat-window-action-btn). Tint it

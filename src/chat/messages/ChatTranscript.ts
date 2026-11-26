@@ -73,6 +73,46 @@ export class ChatTranscript {
       this.shouldAutoScroll = this.isNearBottom();
       this.updateScrollToBottomButton();
     });
+    this.followContentGrowth();
+  }
+
+  /**
+   * Keep a reader who is at the bottom at the bottom while the transcript changes
+   * size after the fact: markdown that finishes rendering after its bubble was
+   * scrolled to, a cancelled edit giving way to taller rendered prose, the composer
+   * growing and shrinking the pane. The explicit scrollToBottom() calls only cover
+   * the moments they run at; this covers every later reflow. It follows only while
+   * shouldAutoScroll holds, so a reader who scrolled up is left where they are.
+   *
+   * Content growth fires no scroll event, so shouldAutoScroll still reflects where
+   * the reader was before the reflow. Rows are observed individually because a
+   * scroll container's own box does not resize when its content does.
+   */
+  private followContentGrowth(): void {
+    if (typeof ResizeObserver === "undefined" || typeof MutationObserver === "undefined") {
+      return;
+    }
+    const messagesEl = this.refs.messagesEl;
+    const resizeObserver = new ResizeObserver(() => this.scrollToBottom());
+    resizeObserver.observe(messagesEl);
+    for (const rowEl of Array.from(messagesEl.children)) resizeObserver.observe(rowEl);
+
+    const rowObserver = new MutationObserver((records) => {
+      for (const record of records) {
+        record.removedNodes.forEach((node) => {
+          if (node.nodeType === Node.ELEMENT_NODE) resizeObserver.unobserve(node as Element);
+        });
+        record.addedNodes.forEach((node) => {
+          if (node.nodeType === Node.ELEMENT_NODE) resizeObserver.observe(node as Element);
+        });
+      }
+    });
+    rowObserver.observe(messagesEl, { childList: true });
+
+    this.owner.register(() => {
+      rowObserver.disconnect();
+      resizeObserver.disconnect();
+    });
   }
 
   /**
@@ -503,7 +543,7 @@ export class ChatTranscript {
         setIcon(chipEl.createSpan({ cls: "lmsa-chat-window-attachment-note-icon" }), "file-text");
         chipEl.createSpan({
           cls: "lmsa-chat-window-attachment-note-label",
-          text: attachment.truncated ? `${attachment.fileName} · truncated` : attachment.fileName,
+          text: attachment.truncated ? `${attachment.fileName} ﾂｷ truncated` : attachment.fileName,
         });
       }
     }

@@ -7,6 +7,8 @@ interface EditorSurface {
   target: InlineEditTarget;
   hostEl: HTMLElement;
   textareaEl: HTMLTextAreaElement;
+  /** The assistant timeline item whose rail marks the edit; null for a user bubble. */
+  timelineItemEl: HTMLElement | null;
 }
 
 /**
@@ -35,7 +37,10 @@ export class InlineMessageEditor {
       const hostEl = this.resolveHost(target);
       const textareaEl = hostEl ? this.openSurface(hostEl, target) : null;
       if (hostEl && textareaEl) {
-        this.surfaces.push({ target, hostEl, textareaEl });
+        const timelineItemEl =
+          this.bubble.role === "assistant" ? hostEl.parentElement : null;
+        timelineItemEl?.addClass("is-editing");
+        this.surfaces.push({ target, hostEl, textareaEl, timelineItemEl });
       }
     }
     if (this.surfaces.length === 0) {
@@ -60,7 +65,9 @@ export class InlineMessageEditor {
 
   /**
    * Edit in place: the textarea takes the content's exact spot, transparent and
-   * borderless, so no extra box appears around the text.
+   * borderless, so no extra box appears around the text. On an assistant turn the
+   * item's own timeline rail carries the edit state instead (see the `is-editing`
+   * item rule in InlineMessageEditor.css).
    */
   private openSurface(
     hostEl: HTMLElement,
@@ -96,14 +103,22 @@ export class InlineMessageEditor {
   /**
    * Inject Save straight into the bubble's own action-button row (the same row
    * the edit button lives in). It reuses the action-button class so it is visually
-   * one of the bubble actions, and the other icons are hidden by CSS. Nothing is
-   * added to the bubble's flow, so entering edit mode never shifts the layout.
+   * one of the bubble actions, and the other icons are hidden by CSS. A hint naming
+   * the state and its keys takes the usage figures' place beside the buttons.
    */
   private renderActions(): void {
     const actionsHost = this.bubble.rowEl.querySelector<HTMLElement>(
       ".lmsa-chat-window-message-actions"
     );
     if (!actionsHost) return;
+
+    const toolbarEl = actionsHost.parentElement ?? actionsHost;
+    const hintEl = toolbarEl.createSpan({ cls: "lmsa-chat-window-inline-editor-hint" });
+    hintEl.createSpan({ cls: "lmsa-chat-window-inline-editor-hint-dot" });
+    hintEl.createSpan({ cls: "lmsa-chat-window-inline-editor-hint-state", text: "Editing" });
+    hintEl.createSpan({ text: "Esc to cancel, Ctrl+Enter to save" });
+    actionsHost.before(hintEl);
+    this.injectedEls.push(hintEl);
 
     const cancelBtn = actionsHost.createEl("button", {
       cls: "lmsa-chat-window-action-btn is-edit-control",
@@ -131,6 +146,7 @@ export class InlineMessageEditor {
   destroy(): void {
     this.bubble.rowEl.removeClass("is-editing");
     for (const surface of this.surfaces) {
+      surface.timelineItemEl?.removeClass("is-editing");
       surface.hostEl.removeClass("lmsa-hidden");
       surface.textareaEl.remove();
     }

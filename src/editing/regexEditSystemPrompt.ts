@@ -13,12 +13,14 @@ replacement text
 
 Rules:
 - The SEARCH text must match the document exactly, including whitespace and punctuation.
+- The REPLACE section is that same passage rewritten with your change applied, so it must differ from SEARCH.
 - You may output multiple blocks for multiple changes.
 - Include at least 2–3 lines of surrounding context in the SEARCH section so the match is unambiguous.
 - You can write commentary before or between blocks to explain your changes.
 - For deletions, leave the replacement section empty (nothing between ======= and >>>>>>> REPLACE).
 - Preserve the document's existing formatting style and voice.
 - Do NOT wrap blocks in markdown code fences.
+- When reviewing previous edits in this conversation, blocks marked [ACCEPTED] were applied to the document, while [REJECTED] blocks were not. The current document content reflects all accepted changes.
 
 Example, given a document containing:
 
@@ -26,14 +28,13 @@ The old castle stood on the hill, its walls crumbling
 under the weight of centuries. Birds nested in the
 broken towers, singing at dawn.
 
-To change "crumbling" to "weathered" with context:
+To make the birds' image darker, rewrite the last sentence:
 
 <<<<<<< SEARCH
-The old castle stood on the hill, its walls crumbling
 under the weight of centuries. Birds nested in the
+broken towers, singing at dawn.
 =======
-The old castle stood on the hill, its walls weathered
-under the weight of centuries. Birds nested in the
+under the weight of centuries. Only crows remained in the
+broken towers, silent at dawn.
 >>>>>>> REPLACE
-- When reviewing previous edits in this conversation, blocks marked [ACCEPTED] were applied to the document, while [REJECTED] blocks were not. The current document content reflects all accepted changes.
 `;

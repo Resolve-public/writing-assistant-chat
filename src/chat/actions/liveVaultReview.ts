@@ -43,6 +43,7 @@ import { EditReviewController } from "../../editing/EditReviewController";
 import type { InlineDiffManager } from "../../editing/inlineDiff/InlineDiffManager";
 import { EditReviewTimelineView } from "../messages/editReviewTimeline";
 import { convertToolCallToEditBlock } from "../../tools/editing/conversion";
+import { NO_OP_EDIT_FAILURE } from "../../tools/editing/validation";
 import { resolveStructuralEditBlocks } from "../../tools/editing/handlers";
 import { defaultRecovery, trimDot } from "../../tools/toolFailure";
 import { toolFailure } from "../../tools/toolFailure";
@@ -423,6 +424,14 @@ export class LiveVaultReview implements VaultOpReviewer {
           results.set(
             call.id,
             editError(call, "search text is empty", "invalid-args", "pass the exact text you want to replace"),
+          );
+          continue;
+        }
+
+        if (kind === "edit" && block.searchText === block.replaceText) {
+          results.set(
+            call.id,
+            editError(call, NO_OP_EDIT_FAILURE.what, "invalid-args", NO_OP_EDIT_FAILURE.recovery),
           );
           continue;
         }

@@ -393,6 +393,24 @@ describe("LiveVaultReview", () => {
     expect(result.content).toContain("search text is empty");
   });
 
+  it("rejects an edit whose replace equals its search instead of queueing an empty review", async () => {
+    const review = new LiveVaultReview({
+      app: makeApp({ files: ["Notes/A.md"], content: "She nodded.\nHe spoke.\n" }),
+      timelineEl: TIMELINE_EL,
+      policy: POLICY({ edit: "auto" }),
+      edit: EDIT_DEPS(),
+    });
+
+    const [{ result }] = await review.resolveEdits([
+      { id: "e1", name: "edit", arguments: { path: "Notes/A.md", search: "He spoke.", replace: "He spoke." } },
+    ]);
+
+    expect(result.isError).toBe(true);
+    expect(result.failure?.kind).toBe("invalid-args");
+    expect(result.content).toMatch(/^Error: /);
+    expect(result.content).toContain("replace is identical to search");
+  });
+
   it("refuses to auto-apply an edit whose search text matches multiple places (str_replace contract)", async () => {
     // Industry standard (Anthropic's str_replace text editor): a non-unique anchor is an
     // error, not a silent guess at one of N identical passages. On the autonomous (auto)
