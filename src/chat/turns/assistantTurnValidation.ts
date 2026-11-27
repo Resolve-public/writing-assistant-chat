@@ -5,10 +5,8 @@ import type {
   ProviderCaptureStage,
   ProviderReplayCapsule,
 } from "../../shared/types";
-import {
-  RESULT_TRUNCATION_MARKER,
-  TOOL_RESULT_CHAR_LIMIT,
-} from "../../tools/resultDigest";
+import { OMISSION_NOTE_MAX_CHARS } from "../../tools/resultDigest";
+import { MAX_TOOL_RESULT_RECORD_CHARS } from "../../tools/resultRecordBounds";
 
 export const ASSISTANT_TURN_MAX_SEGMENTS = 256;
 export const ASSISTANT_TURN_MAX_ITEMS = 1024;
@@ -25,8 +23,13 @@ export const ASSISTANT_TURN_MAX_ID_CHARS = 512;
 export const ASSISTANT_TURN_MAX_PATH_CHARS = 4_096;
 export const ASSISTANT_TURN_MAX_PROSE_CHARS = 1_000_000;
 export const ASSISTANT_TURN_MAX_TOOL_NAME_CHARS = 256;
+/**
+ * The largest record the user's `toolResultRecordChars` setting can produce, plus its
+ * omission note. Validation never reads the setting itself: a conversation recorded under
+ * a larger value must still load after the user lowers it.
+ */
 export const ASSISTANT_TURN_MAX_RESULT_RECORD_CHARS =
-  TOOL_RESULT_CHAR_LIMIT + RESULT_TRUNCATION_MARKER.length;
+  MAX_TOOL_RESULT_RECORD_CHARS + OMISSION_NOTE_MAX_CHARS;
 export const ASSISTANT_TURN_MAX_RESULT_DIGEST_CHARS = 2_000;
 export const ASSISTANT_TURN_MAX_ERROR_CONTENT_CHARS = 8_000;
 export const ASSISTANT_TURN_MAX_REPLAY_CAPSULE_CHARS = 128 * 1024;

@@ -612,3 +612,56 @@ describe("AssistantTurnBuilder tool-result images", () => {
     ).toThrow(/result images cannot be changed/i);
   });
 });
+
+describe("AssistantTurnBuilder result record length", () => {
+  function declaredRead(options: { resultRecordChars?: number } = {}): AssistantTurnBuilder {
+    const turn = new AssistantTurnBuilder({ turnId: "turn-1", ...options });
+    turn.startSegment({ segmentId: "segment-1" });
+    turn.startToolCall("segment-1", {
+      declarationKey: "segment-1:0",
+      providerBlockId: "block-0",
+      toolCallId: "call-read",
+      toolName: "read",
+    });
+    turn.appendToolArgumentsDelta("segment-1:0", "{\"path\":\"Fixtures/long.md\"}", {
+      deltaKey: "args-0",
+    });
+    return turn;
+  }
+  const content = "synthetic line of a long note\n".repeat(100); // 3,000 chars
+
+  it("bounds captured records at the configured length", () => {
+    const turn = declaredRead({ resultRecordChars: 1000 });
+    const capture = turn.captureFields("read", { path: "Fixtures/long.md" }, { content });
+    turn.updateToolLifecycle("call-read", { state: "completed", ...capture });
+    turn.finishSegment("segment-1");
+    const item = turn.finishTurn("completed").items[0];
+    if (item.type !== "tool_call") throw new Error("Fixture shape changed.");
+    expect(item.resultRecord).toContain("of 3000 characters omitted here");
+    expect(item.resultRecord).toContain('call read with path "Fixtures/long.md"');
+  });
+
+  it("keeps a result whole when the configured length allows it", () => {
+    const turn = declaredRead({ resultRecordChars: 5000 });
+    const capture = turn.captureFields("read", { path: "Fixtures/long.md" }, { content });
+    expect(capture.resultRecord).toBe(content);
+  });
+
+  // Two capture paths can write one tool's record (Claude Code's SDK frame and its
+  // lifecycle callback). Both go through captureFields, so they agree; a record bounded
+  // at another length is exactly what the identity merge refuses.
+  it("accepts the same record from two capture paths and refuses a differently bounded one", () => {
+    const turn = declaredRead({ resultRecordChars: 1000 });
+    const first = turn.captureFields("read", { path: "Fixtures/long.md" }, { content });
+    const second = turn.captureFields("read", { path: "Fixtures/long.md" }, { content });
+    turn.updateToolLifecycle("call-read", { state: "completed", ...first });
+    expect(() =>
+      turn.updateToolLifecycle("call-read", { state: "completed", ...second }),
+    ).not.toThrow();
+    const otherLength = new AssistantTurnBuilder({ turnId: "turn-2", resultRecordChars: 1500 })
+      .captureFields("read", { path: "Fixtures/long.md" }, { content });
+    expect(() =>
+      turn.updateToolLifecycle("call-read", { state: "completed", ...otherLength }),
+    ).toThrow("cannot be changed");
+  });
+});

@@ -12,6 +12,10 @@ import {
 } from "../../../src/settings/settingsMigration";
 import { DEFAULT_SETTINGS, DEFAULT_ACTIVE_PROFILE_IDS, DEFAULT_MEMORIES, DEFAULT_RAG_SETTINGS } from "../../../src/constants";
 import { DEFAULT_VAULT_OP_POLICY } from "../../../src/vault-ops/gateway";
+import {
+  MAX_TOOL_RESULT_RECORD_CHARS,
+  MIN_TOOL_RESULT_RECORD_CHARS,
+} from "../../../src/tools/resultRecordBounds";
 import { PROVIDER_DESCRIPTORS } from "../../../src/providers/descriptors";
 
 describe("normalizePluginSettings", () => {
@@ -80,6 +84,25 @@ describe("normalizePluginSettings", () => {
       normalizePluginSettings({ askMaxQuestions: 6.7 } as Partial<PluginSettings>)
         .askMaxQuestions,
     ).toBe(6);
+  });
+
+  // The remembered tool-result length is the user's (RFC-0022). Absent or unusable falls
+  // back to the default; out of range clamps to the nearest bound, keeping the direction the
+  // user chose; a fractional value is floored.
+  it("normalizes the remembered tool-result length into its bounds", () => {
+    expect(normalizePluginSettings({}).toolResultRecordChars).toBe(
+      DEFAULT_SETTINGS.toolResultRecordChars,
+    );
+    const norm = (value: unknown) =>
+      normalizePluginSettings({ toolResultRecordChars: value } as unknown as Partial<PluginSettings>)
+        .toolResultRecordChars;
+    expect(norm(8000)).toBe(8000);
+    expect(norm(8000.9)).toBe(8000);
+    expect(norm(10)).toBe(MIN_TOOL_RESULT_RECORD_CHARS);
+    expect(norm(10_000_000)).toBe(MAX_TOOL_RESULT_RECORD_CHARS);
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, "6000", null]) {
+      expect(norm(bad)).toBe(DEFAULT_SETTINGS.toolResultRecordChars);
+    }
   });
 
   // The always-on system prompt prefix is retired: the profile's custom prompt is the only

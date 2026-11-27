@@ -1,5 +1,10 @@
 import type WritingAssistantChat from "../main";
 import { DEFAULT_ASK_MAX_QUESTIONS, DEFAULT_MAX_TOOL_ROUNDS, MIN_ASK_MAX_QUESTIONS } from "../constants";
+import {
+  DEFAULT_TOOL_RESULT_RECORD_CHARS,
+  MAX_TOOL_RESULT_RECORD_CHARS,
+  MIN_TOOL_RESULT_RECORD_CHARS,
+} from "../tools/resultRecordBounds";
 import type { SettingsSection } from "./definitions/sections";
 import { settingRow } from "./definitions/sections";
 
@@ -55,6 +60,34 @@ export function advancedTabSections(plugin: WritingAssistantChat): SettingsSecti
                   const parsed = parseInt(value, 10);
                   if (!Number.isNaN(parsed) && parsed >= 1 && parsed <= 50) {
                     plugin.settings.maxToolRounds = parsed;
+                    await plugin.saveSettings();
+                  }
+                })
+            );
+          }
+        ),
+        settingRow(
+          "Remembered tool result length",
+          "How many characters of each tool result the model keeps on later turns. In the " +
+            "turn that ran a tool it always sees the whole result; a longer one is kept as " +
+            "its start and end, with a note saying what was left out and how to read it " +
+            "again. Higher values remember more but fill the context window and the saved " +
+            "conversation faster. Applies to new tool results only." +
+            ` Range: ${MIN_TOOL_RESULT_RECORD_CHARS} to ${MAX_TOOL_RESULT_RECORD_CHARS}.` +
+            ` Default: ${DEFAULT_TOOL_RESULT_RECORD_CHARS}.`,
+          (item) => {
+            item.addText((text) =>
+              text
+                .setPlaceholder(String(DEFAULT_TOOL_RESULT_RECORD_CHARS))
+                .setValue(String(plugin.settings.toolResultRecordChars))
+                .onChange(async (value) => {
+                  const parsed = parseInt(value, 10);
+                  if (
+                    !Number.isNaN(parsed) &&
+                    parsed >= MIN_TOOL_RESULT_RECORD_CHARS &&
+                    parsed <= MAX_TOOL_RESULT_RECORD_CHARS
+                  ) {
+                    plugin.settings.toolResultRecordChars = parsed;
                     await plugin.saveSettings();
                   }
                 })

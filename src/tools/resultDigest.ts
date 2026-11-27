@@ -21,21 +21,34 @@ import type {
 import type { ToolResultImage } from "./types";
 import type { VaultOpDisposition } from "../vault-ops/disposition";
 import { ASK_USER_TOOL_NAME } from "./ask/definition";
+import { DEFAULT_TOOL_RESULT_RECORD_CHARS } from "./resultRecordBounds";
 import {
   deriveAskGuidanceCapture,
   formatAskGuidanceDigest,
 } from "./ask/result";
 
 /**
- * Cap (chars) on a stored full-result record (issue question 9), so vault content
- * riding the conversation JSON stays a bounded, linear footprint rather than
- * duplicating whole notes.
+ * Default cap (chars) on a stored full-result record (issue question 9), so vault content
+ * riding the conversation JSON stays a bounded, linear footprint rather than duplicating
+ * whole notes. The user owns the actual value (`toolResultRecordChars`, RFC-0022).
  */
-export const TOOL_RESULT_CHAR_LIMIT = 2000;
+export const TOOL_RESULT_CHAR_LIMIT = DEFAULT_TOOL_RESULT_RECORD_CHARS;
 
-/** Appended to a record truncated at {@link TOOL_RESULT_CHAR_LIMIT} so a bounded
- *  record is distinguishable from a complete one. */
+/**
+ * The marker records captured before the omission note ended with. Never written now;
+ * kept because persisted conversations still carry it.
+ */
 export const RESULT_TRUNCATION_MARKER = " …[truncated]";
+
+/**
+ * Longest tool argument an omission note quotes back. A longer one is referred to as
+ * "the same" argument instead, so the note stays bounded without clipping a path the
+ * model would then copy wrong.
+ */
+const OMISSION_NOTE_MAX_ARG_CHARS = 1024;
+
+/** Upper bound on an omission note's length: two quoted arguments plus the fixed wording. */
+export const OMISSION_NOTE_MAX_CHARS = 2 * OMISSION_NOTE_MAX_ARG_CHARS + 512;
 
 /** The result fields the choke points hand a step, the input to {@link captureStepFields}. */
 export interface ResolvedToolResult {
@@ -69,14 +82,73 @@ export interface StepCaptureFields {
   resultImages?: ToolResultImageRecord[];
 }
 
+/** The recovery sentence for a caller that names no tool. */
+const GENERIC_RECOVERY = "Call the same tool again if you need the omitted part.";
+
 /**
- * Bound a tool result for the stored record. A result over the cap keeps its first
- * {@link TOOL_RESULT_CHAR_LIMIT} chars plus a truncation marker; a shorter one is
- * stored whole.
+ * Bound a tool result for the stored record. A result within `limit` is stored whole.
+ * A longer one keeps its start and its end, about half the limit each and snapped to a
+ * line boundary when one is near, with an omission note between them saying how much is
+ * missing, that this is the result as it was then, and the call that gets it back
+ * (`recovery`). Both ends, because in prose the end of a passage is often what the next
+ * turn needs.
+ *
+ * The note is what lets a model notice the gap at all: a bare cut reads as a result that
+ * simply stops (RFC-0022 D1, the ADR-0021 actionable-failure pattern).
  */
-export function boundToolResult(content: string): string {
-  if (content.length <= TOOL_RESULT_CHAR_LIMIT) return content;
-  return content.slice(0, TOOL_RESULT_CHAR_LIMIT) + RESULT_TRUNCATION_MARKER;
+export function boundToolResult(
+  content: string,
+  limit: number = TOOL_RESULT_CHAR_LIMIT,
+  recovery: string = GENERIC_RECOVERY,
+): string {
+  if (content.length <= limit) return content;
+  const headTarget = Math.ceil(limit / 2);
+  const tailTarget = limit - headTarget;
+
+  let head = content.slice(0, headTarget);
+  const headBreak = head.lastIndexOf("\n");
+  if (headBreak >= headTarget / 2) head = head.slice(0, headBreak + 1);
+
+  let tail = content.slice(content.length - tailTarget);
+  const tailBreak = tail.indexOf("\n");
+  if (tailBreak >= 0 && tailBreak < tailTarget / 2) tail = tail.slice(tailBreak + 1);
+
+  const omitted = content.length - head.length - tail.length;
+  const note =
+    `${head.endsWith("\n") ? "" : "\n"}…[${omitted} of ${content.length} characters omitted ` +
+    `here. This is a copy of the result as it was at that point in the conversation. ` +
+    `${recovery}]\n`;
+  return head + note + tail;
+}
+
+/**
+ * The recovery sentence an omission note ends with, per tool. `read` is the one tool whose
+ * omitted part a model routinely needs, and it has no line offsets, so the way back is
+ * the same path, or `get_outline` and then one section by `headingPath`, which is what
+ * `read`'s own description teaches.
+ */
+export function omissionRecovery(toolName: string, args: Record<string, unknown>): string {
+  if (toolName === "read") {
+    const path = quotedArg(args.path);
+    const heading = quotedArg(args.headingPath);
+    if (heading) {
+      return `For the current text, call read with path ${path ?? "the same path"} and headingPath ${heading}.`;
+    }
+    const target = path ? `path ${path}` : "the same path";
+    return (
+      `For the current text, call read with ${target}, or call get_outline on it and read ` +
+      `only the section you need with a headingPath.`
+    );
+  }
+  return `Call ${toolName} again if you need the omitted part.`;
+}
+
+/** A string argument in double quotes, or null when absent or too long to quote back. */
+function quotedArg(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > OMISSION_NOTE_MAX_ARG_CHARS) return null;
+  return `"${trimmed}"`;
 }
 
 /**
@@ -90,13 +162,20 @@ export function captureStepFields(
   toolName: string,
   args: Record<string, unknown>,
   result: ResolvedToolResult,
+  recordChars: number = TOOL_RESULT_CHAR_LIMIT,
 ): StepCaptureFields {
   const fields: StepCaptureFields = {};
   const askCapture =
     toolName === ASK_USER_TOOL_NAME ? deriveAskGuidanceCapture(args, result) : null;
   const digest = askCapture?.digest ?? formatResultDigest(toolName, args, result);
   if (digest !== undefined) fields.resultDigest = digest;
-  if (result.content) fields.resultRecord = boundToolResult(result.content);
+  if (result.content) {
+    fields.resultRecord = boundToolResult(
+      result.content,
+      recordChars,
+      omissionRecovery(toolName, args),
+    );
+  }
   if (result.disposition !== undefined) fields.disposition = result.disposition;
   if (askCapture) fields.askGuidance = askCapture.guidance;
   // `data` is dropped here rather than at each choke point, so neither can forget to.

@@ -1298,6 +1298,14 @@ export interface PluginSettings {
    * invalidate a conversation recorded under a larger value.
    */
   askMaxQuestions: number;
+  /**
+   * How many characters of each tool result the conversation keeps for later turns
+   * (RFC-0022). The turn that ran a tool always sees the whole result; a longer result is
+   * stored as its start and end with an omission note between. Applied at capture, so it
+   * changes new results only, and never read by validation, so lowering it cannot
+   * invalidate a conversation recorded under a larger value.
+   */
+  toolResultRecordChars: number;
   /** Benchmark report folder and persisted run history. */
   benchmark: BenchmarkSettings;
   /**

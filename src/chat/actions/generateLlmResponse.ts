@@ -34,7 +34,6 @@ import type {
   VaultToolContext,
 } from "./toolLoop";
 import { LiveVaultReview } from "./liveVaultReview";
-import { captureStepFields } from "../../tools/resultDigest";
 import { extractToolInput } from "../../tools/metadata";
 import { finishOrSalvageAssistantTurn } from "../turns/assistantTurnSalvage";
 import { CONTEXT_DANGER_THRESHOLD } from "../../constants";
@@ -203,6 +202,7 @@ export async function generateLlmResponse(options: LlmGenerationOptions): Promis
   };
   const turnBuilder = new AssistantTurnBuilder({
     turnId: draftIdentity.turnId,
+    resultRecordChars: plugin.settings.toolResultRecordChars,
   });
   let capturedTurn: AssistantTurnRecord | null = null;
   let capturedReplayEvidence: AssistantReplayEvidence | null = null;
@@ -622,7 +622,7 @@ export async function generateLlmResponse(options: LlmGenerationOptions): Promis
               ...(actionRef ? { actionRef } : {}),
             });
           } else {
-            const capture = captureStepFields(event.toolName, event.args, {
+            const capture = turnBuilder.captureFields(event.toolName, event.args, {
               content: event.content,
               isError: event.isError,
               disposition: event.disposition,

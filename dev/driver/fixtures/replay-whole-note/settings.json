@@ -1,0 +1,73 @@
+{
+  "_comment": [
+    "Plugin settings baseline for the replay-whole-note fixture vault, a copy of writing-basic (RFC-0013 plan D7, RFC-0022 Stage 0).",
+    "The repository ignores `.obsidian/` and a bare `data.json` at any depth, because it lives",
+    "inside a vault, so a fixture cannot carry a committed config directory: it would be silently",
+    "absent on a clean clone and the instrument would behave differently for whoever reran it.",
+    "The seeding recipe writes this file into the scratch vault as `data.json` instead.",
+    "",
+    "`apiKeysDisclaimerAccepted` and the per-provider `enabled` gates are load-bearing: without",
+    "them the view reports 'No model selected' and the composer is inert.",
+    "",
+    "The seeded model is a CUSTOM entry under a cloud provider, and both halves are deliberate.",
+    "Cloud, because `validateSendRequest` refuses to send unless the model reports available, and",
+    "for a local provider that answer comes from a live LM Studio server the driver has no reason",
+    "to require. `ModelAvailabilityService.getAvailability` short-circuits every cloud provider to",
+    "'cloud' with no network call. Custom rather than catalog, because a committed fixture must",
+    "not name a curated model id that a catalog sync can later remove.",
+    "",
+    "Nothing reaches Anthropic: the scripted client is installed at the `createChatClient` seam,",
+    "so the key below is a placeholder that only satisfies the enablement gate. LM Studio is",
+    "switched off so no discovery runs, which also keeps the run's console output meaningful.",
+    "",
+    "`chatHistory` names the conversation the seeding recipe also writes into `conversations/`,",
+    "so the restore path resolves a real model instead of minting an empty conversation."
+  ],
+  "apiKeysDisclaimerAccepted": true,
+  "agenticMode": true,
+  "includeNoteContext": false,
+  "providerSettings": {
+    "lmstudio": {
+      "enabled": false,
+      "baseUrl": "http://127.0.0.1:1234",
+      "bypassCors": false
+    },
+    "anthropic": {
+      "enabled": true,
+      "apiKey": "driver-fixture-placeholder-never-sent"
+    },
+    "openai": { "enabled": false, "apiKey": "", "baseUrl": "" },
+    "claudecode": { "enabled": false, "claudePath": "" }
+  },
+  "customModels": {
+    "anthropic": [
+      {
+        "modelId": "driver-fixture-model",
+        "name": "Driver fixture model",
+        "role": "completion"
+      }
+    ]
+  },
+  "lmStudioModelCache": {
+    "completion": [],
+    "embedding": [],
+    "discoveredAt": null
+  },
+  "rag": { "enabled": false },
+  "knowledgeGraph": { "enabled": false },
+  "chatHistory": {
+    "conversations": [
+      {
+        "id": "driver-fixture-conversation",
+        "title": "Driver fixture",
+        "createdAt": 1753833600000,
+        "updatedAt": 1753833600000,
+        "modelId": "anthropic:driver-fixture-model",
+        "modelName": "Driver fixture model",
+        "messageCount": 0,
+        "approvalPosture": "ask"
+      }
+    ],
+    "activeConversationId": "driver-fixture-conversation"
+  }
+}

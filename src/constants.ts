@@ -1,5 +1,6 @@
 import type { BenchmarkSettings, ChatHistory, KnowledgeGraphSettings, Memory, PluginSettings, ProviderOption, ProviderProfile, RagSettings } from "./shared/types";
 import { DEFAULT_VAULT_OP_POLICY } from "./vault-ops/gateway";
+import { DEFAULT_TOOL_RESULT_RECORD_CHARS } from "./tools/resultRecordBounds";
 import type { ImageMimeType } from "./shared/types";
 
 export const VIEW_TYPE_CHAT = "writing-assistant-chat";
@@ -265,6 +266,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   agenticMode: true,
   maxToolRounds: DEFAULT_MAX_TOOL_ROUNDS,
   askMaxQuestions: DEFAULT_ASK_MAX_QUESTIONS,
+  toolResultRecordChars: DEFAULT_TOOL_RESULT_RECORD_CHARS,
   benchmark: { ...DEFAULT_BENCHMARK_SETTINGS },
   vaultOpPolicy: { ...DEFAULT_VAULT_OP_POLICY, scopes: [...DEFAULT_VAULT_OP_POLICY.scopes] },
   favoriteModelKeys: [],

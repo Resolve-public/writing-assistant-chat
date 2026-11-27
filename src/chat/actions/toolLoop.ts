@@ -778,7 +778,7 @@ export async function runToolLoop(
         ...(result.isError && { isError: true, errorContent: result.content }),
         // Replay capture: discovery digest and bounded record (ADR-0016); the sibling
         // choke point is Claude Code's callTool end event.
-        ...captureStepFields(tc.name, tc.arguments, result),
+        ...turnBuilder.captureFields(tc.name, tc.arguments, result),
       });
     }
     // Vault-op and edit steps were already recorded before resolution, push results,
@@ -922,7 +922,7 @@ function recordToolResult(
   result: ToolResult,
   _round: number,
 ): void {
-  const capture = captureStepFields(
+  const capture = builder.captureFields(
     toolCall.name,
     toolCall.arguments,
     result,

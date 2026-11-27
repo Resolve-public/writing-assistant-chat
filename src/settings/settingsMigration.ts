@@ -43,6 +43,10 @@ import {
   MIN_ASK_MAX_QUESTIONS,
 } from "../constants";
 import {
+  MAX_TOOL_RESULT_RECORD_CHARS,
+  MIN_TOOL_RESULT_RECORD_CHARS,
+} from "../tools/resultRecordBounds";
+import {
   MEMORY_CONTENT_MAX_CODE_POINTS,
   MEMORY_DESCRIPTION_MAX_CODE_POINTS,
   codePointLength,
@@ -549,6 +553,21 @@ function normalizeAskMaxQuestions(value: unknown): number {
 }
 
 /**
+ * The stored tool-result record length. Absent or non-numeric falls back to the default;
+ * a value outside the bounds is clamped to the nearest one rather than discarded, since
+ * the user chose a direction (more, or less) and the nearest bound honors it.
+ */
+function normalizeToolResultRecordChars(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_SETTINGS.toolResultRecordChars;
+  }
+  return Math.min(
+    MAX_TOOL_RESULT_RECORD_CHARS,
+    Math.max(MIN_TOOL_RESULT_RECORD_CHARS, Math.floor(value)),
+  );
+}
+
+/**
  * Starred models are composed `provider:modelId` keys; anything else (wrong
  * type, malformed key, duplicate) is dropped rather than carried forever.
  */
@@ -713,6 +732,7 @@ export function normalizePluginSettings(data: Partial<PluginSettings> | null): P
         : DEFAULT_SETTINGS.agenticMode,
     maxToolRounds: migrateMaxToolRounds(data),
     askMaxQuestions: normalizeAskMaxQuestions(data?.askMaxQuestions),
+    toolResultRecordChars: normalizeToolResultRecordChars(data?.toolResultRecordChars),
     benchmark: normalizeBenchmarkSettings(data?.benchmark),
     vaultOpPolicy: normalizeVaultOpPolicy(data?.vaultOpPolicy),
     favoriteModelKeys: normalizeFavoriteModelKeys(data?.favoriteModelKeys),

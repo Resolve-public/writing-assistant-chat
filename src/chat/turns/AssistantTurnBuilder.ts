@@ -5,7 +5,11 @@ import type {
 } from "../../api/assistantCapture";
 import { CaptureConflictError } from "../../api/assistantCapture";
 import type { AssistantStreamEvent } from "../../api/usageTypes";
-import { captureStepFields } from "../../tools/resultDigest";
+import {
+  captureStepFields,
+  TOOL_RESULT_CHAR_LIMIT,
+} from "../../tools/resultDigest";
+import type { ResolvedToolResult, StepCaptureFields } from "../../tools/resultDigest";
 import type {
   AssistantProseItem,
   AssistantToolCallItem,
@@ -30,6 +34,13 @@ export type AssistantTurnBuilderIdKind = "segment" | "item";
 export interface AssistantTurnBuilderOptions {
   turnId: string;
   createId?: (kind: AssistantTurnBuilderIdKind) => string;
+  /**
+   * Length of each stored tool-result record (the user's `toolResultRecordChars`). Owned
+   * here because two capture paths can write the same tool's record (the Claude Code SDK
+   * frame and its lifecycle callback), and the identity merge refuses two different
+   * records: one owner means one length.
+   */
+  resultRecordChars?: number;
 }
 
 export interface StartAssistantTurnSegment {
@@ -282,13 +293,27 @@ export class AssistantTurnBuilder {
   /** The draft a capture transaction is applying to, or null outside one. */
   private working: AssistantTurnBuilderState | null = null;
   private finishedRecord: AssistantTurnRecord | null = null;
+  private readonly resultRecordChars: number;
 
   constructor(options: AssistantTurnBuilderOptions) {
     assertNonEmpty(options.turnId, "Turn ID");
     this.turnId = options.turnId;
     this.createId =
       options.createId ?? ((kind) => `${kind}-${generateId()}`);
+    this.resultRecordChars = options.resultRecordChars ?? TOOL_RESULT_CHAR_LIMIT;
     this.committed = createBuilderState(options.turnId);
+  }
+
+  /**
+   * The replay-capture fields for one tool result, bounded at this turn's record length.
+   * Every capture path that feeds this builder goes through here, so they cannot disagree.
+   */
+  captureFields(
+    toolName: string,
+    args: Record<string, unknown>,
+    result: ResolvedToolResult,
+  ): StepCaptureFields {
+    return captureStepFields(toolName, args, result, this.resultRecordChars);
   }
 
   /**
@@ -523,7 +548,7 @@ export class AssistantTurnBuilder {
       case "tool_result": {
         const item = this.state.toolByCallId.get(fact.toolCallId);
         const capture = item
-          ? captureStepFields(item.toolName, item.toolArgs ?? {}, {
+          ? this.captureFields(item.toolName, item.toolArgs ?? {}, {
               content: fact.content,
               isError: fact.isError,
             })

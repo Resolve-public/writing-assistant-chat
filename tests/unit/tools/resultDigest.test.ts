@@ -7,6 +7,8 @@ import {
   formatResultDigest,
   formatStepReplayLine,
   INTERRUPTED_REPLAY_MARKER,
+  OMISSION_NOTE_MAX_CHARS,
+  omissionRecovery,
   RESULT_TRUNCATION_MARKER,
   TOOL_RESULT_CHAR_LIMIT,
 } from "../../../src/tools/resultDigest";
@@ -29,17 +31,74 @@ describe("boundToolResult", () => {
     expect(boundToolResult(short)).toBe(short);
   });
 
-  it("truncates an oversized result at the cap with a marker", () => {
-    const big = "x".repeat(TOOL_RESULT_CHAR_LIMIT + 3000);
-    const bounded = boundToolResult(big);
-    expect(bounded).toBe("x".repeat(TOOL_RESULT_CHAR_LIMIT) + RESULT_TRUNCATION_MARKER);
-    expect(bounded.startsWith(big.slice(0, TOOL_RESULT_CHAR_LIMIT))).toBe(true);
-    expect(bounded.endsWith(RESULT_TRUNCATION_MARKER)).toBe(true);
+  it("keeps the start and the end of an oversized result around an omission note", () => {
+    const big = "H".repeat(1000) + "M".repeat(3000) + "T".repeat(1000);
+    const bounded = boundToolResult(big, 2000, "Call read again.");
+    const [head, rest] = bounded.split("\n…[");
+    const tail = rest.slice(rest.indexOf("]\n") + 2);
+    expect(head).toBe("H".repeat(1000));
+    expect(tail).toBe("T".repeat(1000));
+    expect(bounded).not.toContain("M");
+    expect(bounded).toContain(
+      "…[3000 of 5000 characters omitted here. This is a copy of the result as it was at " +
+        "that point in the conversation. Call read again.]",
+    );
+    expect(bounded).not.toContain(RESULT_TRUNCATION_MARKER);
   });
 
-  it("keeps a result exactly at the cap whole (no marker)", () => {
+  it("snaps both cuts to a nearby line boundary rather than splitting a line", () => {
+    const line = (n: number) => `${String(n).padStart(4)}\tline of text number ${n}\n`;
+    const big = Array.from({ length: 400 }, (_, i) => line(i + 1)).join("");
+    const bounded = boundToolResult(big, 2000, "Call read again.");
+    const [head, rest] = bounded.split("…[");
+    const tail = rest.slice(rest.indexOf("]\n") + 2);
+    expect(head.endsWith("\n")).toBe(true);
+    expect(big.startsWith(head)).toBe(true);
+    expect(big.endsWith(tail)).toBe(true);
+    expect(tail.startsWith(" ")).toBe(true);
+    expect(tail).toMatch(/^\s*\d+\tline of text number \d+\n/);
+  });
+
+  it("keeps a result exactly at the limit whole (no note)", () => {
     const exact = "y".repeat(TOOL_RESULT_CHAR_LIMIT);
     expect(boundToolResult(exact)).toBe(exact);
+  });
+
+  it("honors a caller-supplied limit", () => {
+    const content = "a".repeat(800);
+    expect(boundToolResult(content, 1000)).toBe(content);
+    expect(boundToolResult(content, 500)).toContain("characters omitted here");
+  });
+});
+
+describe("omissionRecovery", () => {
+  it("points a whole-note read back at the same path or at get_outline and a section", () => {
+    expect(omissionRecovery("read", { path: "Drafts/Chapter 3.md" })).toBe(
+      'For the current text, call read with path "Drafts/Chapter 3.md", or call ' +
+        "get_outline on it and read only the section you need with a headingPath.",
+    );
+  });
+
+  it("points a section read back at the same section", () => {
+    expect(
+      omissionRecovery("read", { path: "Drafts/Chapter 3.md", headingPath: "Act I > The Duel" }),
+    ).toBe(
+      'For the current text, call read with path "Drafts/Chapter 3.md" and headingPath ' +
+        '"Act I > The Duel".',
+    );
+  });
+
+  it("refers to an argument too long to quote as the same one instead of clipping it", () => {
+    const longPath = "a/".repeat(600) + "note.md";
+    const recovery = omissionRecovery("read", { path: longPath });
+    expect(recovery).toContain("call read with the same path");
+    expect(recovery.length).toBeLessThanOrEqual(OMISSION_NOTE_MAX_CHARS);
+  });
+
+  it("names the tool for any other tool", () => {
+    expect(omissionRecovery("search_content", { query: "oath" })).toBe(
+      "Call search_content again if you need the omitted part.",
+    );
   });
 });
 
@@ -253,11 +312,22 @@ describe("captureStepFields", () => {
     expect(fields.disposition).toBeUndefined();
   });
 
-  it("bounds the stored record of an oversized result", () => {
+  it("bounds the stored record of an oversized result with the tool's recovery", () => {
     const big = "z".repeat(TOOL_RESULT_CHAR_LIMIT + 500);
     const fields = captureStepFields("read", { path: "big.md" }, { content: big });
-    expect(fields.resultRecord).toBe("z".repeat(TOOL_RESULT_CHAR_LIMIT) + RESULT_TRUNCATION_MARKER);
+    expect(fields.resultRecord).toBe(
+      boundToolResult(big, TOOL_RESULT_CHAR_LIMIT, omissionRecovery("read", { path: "big.md" })),
+    );
+    expect(fields.resultRecord).toContain('call read with path "big.md"');
     expect(fields.resultDigest).toBeUndefined();
+  });
+
+  it("bounds the record at the length it is given", () => {
+    const content = "q".repeat(3000);
+    const whole = captureStepFields("read", { path: "a.md" }, { content }, 5000);
+    expect(whole.resultRecord).toBe(content);
+    const cut = captureStepFields("read", { path: "a.md" }, { content }, 1000);
+    expect(cut.resultRecord).toContain("2000 of 3000 characters omitted here");
   });
 
   it("returns nothing for a call with no content, disposition, or digest", () => {
