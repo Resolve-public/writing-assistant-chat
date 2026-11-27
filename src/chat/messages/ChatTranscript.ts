@@ -239,7 +239,10 @@ export class ChatTranscript {
     messages: ConversationMessage[],
     actionCallbacks?: BubbleActionCallbacks,
   ): Promise<void> {
+    // Emptying the container drops its scrollTop to 0, so a reader who scrolled
+    // up (to edit or delete an older message) is put back where they were.
     const wasAutoScroll = this.shouldAutoScroll;
+    const previousScrollTop = this.refs.messagesEl.scrollTop;
     this.clear();
     this.shouldAutoScroll = wasAutoScroll;
 
@@ -254,6 +257,13 @@ export class ChatTranscript {
         const isLastAssistant = i === lastAssistantIndex;
         this.attachBubbleActions(bubble, message, isLastAssistant, actionCallbacks);
       }
+    }
+
+    if (!wasAutoScroll) {
+      this.refs.messagesEl.scrollTop = previousScrollTop;
+      // A scroll event fired while the container was briefly short may have
+      // flipped this on; the reader is still scrolled up.
+      this.shouldAutoScroll = false;
     }
   }
 
